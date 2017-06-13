@@ -4,7 +4,7 @@ The TinyPounder is a GUI tool to test creation / removal / destroyal of Ehcache3
 
 The TinyPounder does not embed ehcache3 libraries; instead it relies on a kit (an archive that contains the ehcache libraries).
 
-You can find Open Source Ehcache3 kits on the Ehcache3 release page.
+You can find Open Source Ehcache3 kits on the https://github.com/ehcache/ehcache3/releases[Ehcache3 release page]  (archives that end with -kit).
 
 == How to use
 
