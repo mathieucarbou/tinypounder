@@ -19,7 +19,7 @@ If you usually run the TinyPounder with the same kit, you can provide its path a
 java -jar tinypounderXXX.jar --kit.path=/path/to/unzipped/kit/
 ----
 
-Then head to [http://localhost:8080](http://localhost:8080)
+Then head to http://localhost:8080
 
 == How to build
 
