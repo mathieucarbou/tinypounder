@@ -10,21 +10,26 @@ You can find Open Source Ehcache3 kits on the Ehcache3 release page.
 
 To start the TinyPounder, you can download it and start it with :
 
-```java -jar tinypounderXXX.jar```
+----
+java -jar tinypounderXXX.jar
+----
 
 If you usually run the TinyPounder with the same kit, you can provide its path at start time :
-
-```java -jar tinypounderXXX.jar --kit.path=/path/to/unzipped/kit/```
+----
+java -jar tinypounderXXX.jar --kit.path=/path/to/unzipped/kit/
+----
 
 Then head to [http://localhost:8080](http://localhost:8080)
 
 == How to build
 
 To build the TinyPounder, clone this git repo and run :
-
-```./mvnw clean package```
+----
+./mvnw clean package
+----
 
 and then start it with :
-
-```java -jar target/tinypounderXXX.jar```
+----
+java -jar target/tinypounderXXX.jar
+----
 
