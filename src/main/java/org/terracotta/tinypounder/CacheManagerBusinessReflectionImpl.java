@@ -22,26 +22,96 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.math.BigInteger;
 import java.net.URI;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
+
+import static org.terracotta.tinypounder.CacheConfiguration.ClusterTierType.DEDICATED;
+import static org.terracotta.tinypounder.CacheConfiguration.ClusterTierType.SHARED;
 
 @Service
 public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness {
 
-
-  public static final String NO_CACHE_MANAGER = "NO CACHE MANAGER";
+  private final ConcurrentMap<String, Integer> poundingMap = new ConcurrentHashMap<>();
+  private static final String NO_CACHE_MANAGER = "NO CACHE MANAGER";
   private final KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator;
   private Object cacheManager;
   private Class<?> ehCacheManagerClass;
+  private Random random = new Random();
+
+  private final ScheduledExecutorService poundingScheduler = Executors.newScheduledThreadPool(1);
 
   public CacheManagerBusinessReflectionImpl(KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator) throws Exception {
     this.kitAwareClassLoaderDelegator = kitAwareClassLoaderDelegator;
+    poundingScheduler.scheduleAtFixedRate(() -> poundingMap.entrySet().parallelStream().forEach(entryConsumer -> {
+      try {
+        Object cache = getCache(entryConsumer.getKey());
+        if (cache != null && entryConsumer.getValue() > 0) {
+          pound(cache, entryConsumer.getValue());
+        }
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }), 5000, 100, TimeUnit.MILLISECONDS);
+  }
+
+  private void pound(Object cache, Integer intensity) {
+    IntStream.range(0, intensity).forEach(value -> {
+      put(cache, ThreadLocalRandom.current().nextLong(0, intensity * 1000), longString(intensity));
+      IntStream.range(0, 3).forEach(getIterationValue -> get(cache, ThreadLocalRandom.current().nextLong(0, intensity * 1000)));
+    });
+  }
+
+  private Object get(Object cache, long key) {
+    try {
+      Class<?> cacheClass = loadClass("org.ehcache.core.Ehcache");
+      Method getCacheMethod = cacheClass.getMethod("get", Object.class);
+      return getCacheMethod.invoke(cache, key);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private String longString(Integer intensity) {
+    return new BigInteger(intensity * 10, random).toString(16);
+  }
+
+  private void put(Object cache, long key, String value) {
+    try {
+      Class<?> cacheClass = loadClass("org.ehcache.core.Ehcache");
+      Method putCacheMethod = cacheClass.getMethod("put", Object.class, Object.class);
+      putCacheMethod.invoke(cache, key, value);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private Object getCache(String cacheAlias) {
+    if (cacheManager == null) {
+      return null;
+    }
+    try {
+      Method getCacheMethod = ehCacheManagerClass.getMethod("getCache", String.class, Class.class, Class.class);
+      return getCacheMethod.invoke(cacheManager, cacheAlias, Long.class, String.class);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private Class loadClass(String className) throws ClassNotFoundException {
@@ -66,13 +136,14 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
     }
   }
 
+
   @Override
-  public void createCache(String alias) {
+  public void createCache(String alias, CacheConfiguration cacheConfiguration) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       Class<?> cacheConfigurationClass = loadClass("org.ehcache.config.CacheConfiguration");
       Method createCacheMethod = ehCacheManagerClass.getMethod("createCache", String.class, cacheConfigurationClass);
-      createCacheMethod.invoke(cacheManager, alias, defaultCacheConfigurationHeapOffHeapDedicatedClustered());
+      createCacheMethod.invoke(cacheManager, alias, defaultCacheConfigurationHeapOffHeapDedicatedClustered(cacheConfiguration));
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -84,6 +155,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       Method closeMethod = ehCacheManagerClass.getMethod("close");
       closeMethod.invoke(cacheManager);
+      poundingMap.clear();
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -95,6 +167,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       Method destroyMethod = ehCacheManagerClass.getMethod("destroy");
       destroyMethod.invoke(cacheManager);
+      poundingMap.clear();
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -106,6 +179,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       Method destroyCacheMethod = ehCacheManagerClass.getMethod("destroyCache", String.class);
       destroyCacheMethod.invoke(cacheManager, alias);
+      poundingMap.remove(alias);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -117,6 +191,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       Method removeCacheMethod = ehCacheManagerClass.getMethod("removeCache", String.class);
       removeCacheMethod.invoke(cacheManager, alias);
+      poundingMap.remove(alias);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -267,42 +342,78 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
 
   }
 
-  private Object defaultCacheConfigurationHeapOffHeapDedicatedClustered() throws Exception {
+  private Object defaultCacheConfigurationHeapOffHeapDedicatedClustered(CacheConfiguration plouf) throws Exception {
     Class<?> cacheConfigurationBuilderClass = loadClass("org.ehcache.config.builders.CacheConfigurationBuilder");
     Class<?> builderClass = loadClass("org.ehcache.config.Builder");
     Method newCacheConfigurationBuilderMethod = cacheConfigurationBuilderClass.getMethod("newCacheConfigurationBuilder", Class.class, Class.class, builderClass);
-    Object resourcePoolsBuilder = defaultCacheConfigurationCacheResourcePoolBuilder(kitAwareClassLoaderDelegator.isEEKit());
-    Object cacheConfigurationBuilder = newCacheConfigurationBuilderMethod.invoke(null, String.class, String.class, resourcePoolsBuilder);
+    Object resourcePoolsBuilder = defaultCacheConfigurationCacheResourcePoolBuilder(kitAwareClassLoaderDelegator.isEEKit(), plouf);
+    Object cacheConfigurationBuilder = newCacheConfigurationBuilderMethod.invoke(null, Long.class, String.class, resourcePoolsBuilder);
     Method buildMethod = cacheConfigurationBuilderClass.getMethod("build");
-    Object cacheConfiguration = buildMethod.invoke(cacheConfigurationBuilder);
-    return cacheConfiguration;
+    return buildMethod.invoke(cacheConfigurationBuilder);
   }
 
-  private Object defaultCacheConfigurationCacheResourcePoolBuilder(boolean eeKit) throws Exception {
+  private Object defaultCacheConfigurationCacheResourcePoolBuilder(boolean eeKit, CacheConfiguration cacheConfiguration) throws Exception {
     Class<?> resourcePoolsBuilderClass = loadClass("org.ehcache.config.builders.ResourcePoolsBuilder");
-    Method heapMethod = resourcePoolsBuilderClass.getMethod("heap", long.class);
-    Object resourcePoolsBuilder = heapMethod.invoke(null, 1000L);
+    Class<?> resourceUnitClass = loadClass("org.ehcache.config.ResourceUnit");
     Class<?> memoryUnitClass = loadClass("org.ehcache.config.units.MemoryUnit");
-    Method valueOfMethod = memoryUnitClass.getMethod("valueOf", String.class);
-    Object mB = valueOfMethod.invoke(null, "MB");
-    Method offHeapMethod = resourcePoolsBuilderClass.getMethod("offheap", long.class, memoryUnitClass);
-    resourcePoolsBuilder = offHeapMethod.invoke(resourcePoolsBuilder, 10L, mB);
+    Class<?> entryUnitClass = loadClass("org.ehcache.config.units.EntryUnit");
+    Method memoryUnitClassMethod = memoryUnitClass.getMethod("valueOf", String.class);
+    Method entryUnitClassMethod = entryUnitClass.getMethod("valueOf", String.class);
+    Method newResourcePoolsBuilder = resourcePoolsBuilderClass.getMethod("newResourcePoolsBuilder");
+    Object resourcePoolsBuilder = newResourcePoolsBuilder.invoke(null);
+
+    if (cacheConfiguration.getOnHeapSize() > 0) {
+      Method heapMethod = resourcePoolsBuilderClass.getMethod("heap", long.class, resourceUnitClass);
+      Object onHeapSizeUnit;
+      if (cacheConfiguration.getOnHeapSizeUnit().equals("ENTRIES")) {
+        onHeapSizeUnit = entryUnitClassMethod.invoke(null, cacheConfiguration.getOnHeapSizeUnit());
+      } else {
+        onHeapSizeUnit = memoryUnitClassMethod.invoke(null, cacheConfiguration.getOnHeapSizeUnit());
+      }
+      resourcePoolsBuilder = heapMethod.invoke(resourcePoolsBuilder, cacheConfiguration.getOnHeapSize(), onHeapSizeUnit);
+    }
+    if (cacheConfiguration.getOffHeapSize() > 0) {
+      Object offHeapSizeUnit = memoryUnitClassMethod.invoke(null, cacheConfiguration.getOffHeapSizeUnit());
+      Method offHeapMethod = resourcePoolsBuilderClass.getMethod("offheap", long.class, memoryUnitClass);
+      resourcePoolsBuilder = offHeapMethod.invoke(resourcePoolsBuilder, cacheConfiguration.getOffHeapSize(), offHeapSizeUnit);
+    }
+    if (cacheConfiguration.getDiskSize() > 0) {
+      Object diskSizeUnit = memoryUnitClassMethod.invoke(null, cacheConfiguration.getDiskSizeUnit());
+      Method diskMethod = resourcePoolsBuilderClass.getMethod("disk", long.class, memoryUnitClass);
+      resourcePoolsBuilder = diskMethod.invoke(resourcePoolsBuilder, cacheConfiguration.getDiskSize(), diskSizeUnit);
+    }
+
     Class<?> resourcePoolClass = loadClass("org.ehcache.config.ResourcePool");
     Method withMethod = resourcePoolsBuilderClass.getMethod("with", resourcePoolClass);
 
-    Object clusteredDedicatedResourcePoolImpl;
-    if (eeKit) {
-      Class<?> enterpriseClusteredDedicatedResourcePoolImplClass = loadClass("com.terracottatech.ehcache.clustered.client.internal.config.EnterpriseClusteredDedicatedResourcePoolImpl");
-      Constructor<?> enterpriseClusteredDedicatedResourcePoolImplConstructor = enterpriseClusteredDedicatedResourcePoolImplClass.getConstructor(String.class, long.class, memoryUnitClass);
-      clusteredDedicatedResourcePoolImpl = enterpriseClusteredDedicatedResourcePoolImplConstructor.newInstance("primary-server-resource", 20, mB);
-    } else {
-      Class<?> clusteredDedicatedResourcePoolImplClass = loadClass("org.ehcache.clustered.client.internal.config.DedicatedClusteredResourcePoolImpl");
-      Constructor<?> enterpriseClusteredDedicatedResourcePoolImplConstructor = clusteredDedicatedResourcePoolImplClass.getConstructor(String.class, long.class, memoryUnitClass);
-      clusteredDedicatedResourcePoolImpl = enterpriseClusteredDedicatedResourcePoolImplConstructor.newInstance("primary-server-resource", 20, mB);
+    if (cacheConfiguration.getClusteredTierType().equals(DEDICATED) && cacheConfiguration.getClusteredDedicatedSize() > 0) {
+      Object clusteredDedicatedResourcePoolImpl;
+      Object clusteredDedicatedSizeUnit = memoryUnitClassMethod.invoke(null, cacheConfiguration.getClusteredDedicatedUnit());
+      if (eeKit) {
+        Class<?> enterpriseClusteredDedicatedResourcePoolImplClass = loadClass("com.terracottatech.ehcache.clustered.client.internal.config.EnterpriseClusteredDedicatedResourcePoolImpl");
+        Constructor<?> enterpriseClusteredDedicatedResourcePoolImplConstructor = enterpriseClusteredDedicatedResourcePoolImplClass.getConstructor(String.class, long.class, memoryUnitClass);
+        clusteredDedicatedResourcePoolImpl = enterpriseClusteredDedicatedResourcePoolImplConstructor.newInstance("primary-server-resource", cacheConfiguration.getClusteredDedicatedSize(), clusteredDedicatedSizeUnit);
+      } else {
+        Class<?> clusteredDedicatedResourcePoolImplClass = loadClass("org.ehcache.clustered.client.internal.config.DedicatedClusteredResourcePoolImpl");
+        Constructor<?> enterpriseClusteredDedicatedResourcePoolImplConstructor = clusteredDedicatedResourcePoolImplClass.getConstructor(String.class, long.class, memoryUnitClass);
+        clusteredDedicatedResourcePoolImpl = enterpriseClusteredDedicatedResourcePoolImplConstructor.newInstance("primary-server-resource", cacheConfiguration.getClusteredDedicatedSize(), clusteredDedicatedSizeUnit);
+      }
+      resourcePoolsBuilder = withMethod.invoke(resourcePoolsBuilder, clusteredDedicatedResourcePoolImpl);
+    } else if (cacheConfiguration.getClusteredTierType().equals(SHARED) && cacheConfiguration.getClusteredSharedPoolName() != null) {
+      Object clusteredsharedResourcePoolImpl;
+      if (eeKit) {
+        Class<?> enterpriseClusteredDedicatedResourcePoolImplClass = loadClass("com.terracottatech.ehcache.clustered.client.internal.config.EnterpriseClusteredSharedResourcePoolImpl");
+        Constructor<?> enterpriseClusteredDedicatedResourcePoolImplConstructor = enterpriseClusteredDedicatedResourcePoolImplClass.getConstructor(String.class);
+        clusteredsharedResourcePoolImpl = enterpriseClusteredDedicatedResourcePoolImplConstructor.newInstance(cacheConfiguration.getClusteredSharedPoolName());
+      } else {
+        Class<?> clusteredDedicatedResourcePoolImplClass = loadClass("org.ehcache.clustered.client.internal.config.SharedClusteredResourcePoolImpl");
+        Constructor<?> enterpriseClusteredDedicatedResourcePoolImplConstructor = clusteredDedicatedResourcePoolImplClass.getConstructor(String.class);
+        clusteredsharedResourcePoolImpl = enterpriseClusteredDedicatedResourcePoolImplConstructor.newInstance(cacheConfiguration.getClusteredSharedPoolName());
+      }
+      resourcePoolsBuilder = withMethod.invoke(resourcePoolsBuilder, clusteredsharedResourcePoolImpl);
     }
 
-    Object resourcePoolBuilder = withMethod.invoke(resourcePoolsBuilder, clusteredDedicatedResourcePoolImpl);
-    return resourcePoolBuilder;
+    return resourcePoolsBuilder;
   }
 
   private void deleteFolder(String tinyPounderDiskPersistenceLocation) throws IOException {
@@ -335,5 +446,15 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
+  }
+
+  @Override
+  public void updatePoundingIntensity(String cacheAlias, int poundingIntensity) {
+    poundingMap.put(cacheAlias, poundingIntensity);
+  }
+
+  @Override
+  public int retrievePoundingIntensity(String cacheAlias) {
+    return poundingMap.getOrDefault(cacheAlias, 0);
   }
 }

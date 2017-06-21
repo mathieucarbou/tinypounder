@@ -20,7 +20,7 @@ import java.util.Collection;
 public interface CacheManagerBusiness {
   Collection<String> retrieveCacheNames();
 
-  void createCache(String alias);
+  void createCache(String alias, CacheConfiguration cacheConfiguration);
 
   void close();
 
@@ -37,4 +37,8 @@ public interface CacheManagerBusiness {
   boolean isCacheManagerAlive();
 
   String getStatus();
+
+  void updatePoundingIntensity(String cacheAlias, int poundingIntensity);
+
+  int retrievePoundingIntensity(String cacheAlias);
 }

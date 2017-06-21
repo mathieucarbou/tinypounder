@@ -16,6 +16,7 @@
 
 package org.terracotta.tinypounder;
 
+import org.ehcache.Cache;
 import org.ehcache.CachePersistenceException;
 import org.ehcache.PersistentCacheManager;
 import org.ehcache.clustered.client.config.builders.ClusteredResourcePoolBuilder;
@@ -39,6 +40,7 @@ import java.util.Collection;
 import java.util.Comparator;
 
 import static org.ehcache.config.builders.ResourcePoolsBuilder.heap;
+import static org.ehcache.config.builders.ResourcePoolsBuilder.newResourcePoolsBuilder;
 
 
 /**
@@ -59,7 +61,8 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
   private CacheConfiguration defaultCacheConfigurationHeapOffHeapDedicatedClustered() {
     return CacheConfigurationBuilder.newCacheConfigurationBuilder(
         String.class, String.class,
-        heap(1000)
+        newResourcePoolsBuilder().
+            heap(1000L, MemoryUnit.KB)
             .offheap(10, MemoryUnit.MB)
             .with(ClusteredResourcePoolBuilder.clusteredDedicated("primary-server-resource", 20, MemoryUnit.MB)))
         .build();
@@ -75,7 +78,7 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
   }
 
   @Override
-  public void createCache(String alias) {
+  public void createCache(String alias, org.terracotta.tinypounder.CacheConfiguration cacheConfiguration) {
     cacheManager.createCache(alias, defaultCacheConfigurationHeapOffHeapDedicatedClustered());
   }
 
@@ -139,6 +142,8 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
 //            )
         ;
 
+    Cache<Integer, String> cache = cacheManager.getCache(cmName, Integer.class, String.class);
+//cache.put();
     EhcacheManager cacheManager = (EhcacheManager) cacheManagerBuilder.build();
     cacheManager.init();
     this.cacheManager = cacheManager;
@@ -152,5 +157,15 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
   @Override
   public String getStatus() {
     return null;
+  }
+
+  @Override
+  public void updatePoundingIntensity(String cacheAlias, int poundingIntensity) {
+
+  }
+
+  @Override
+  public int retrievePoundingIntensity(String cacheAlias) {
+    return 0;
   }
 }

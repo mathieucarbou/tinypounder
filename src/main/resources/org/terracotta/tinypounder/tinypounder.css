@@ -1,0 +1,23 @@
+.align-bottom, v-textfield-align-bottom {
+    margin-top: 24px !important;
+}
+
+.valo .v-margin-top {
+    padding-top: 5px !important;
+}
+
+.valo .v-margin-bottom {
+    padding-bottom: 5px !important;
+}
+
+.small-combo {
+    width: 90px !important;
+}
+
+.v-caption-pounding-slider {
+    text-align: center !important;
+}
+
+/*.v-widget {*/
+/*vertical-align: bottom!important;*/
+/*}*/
