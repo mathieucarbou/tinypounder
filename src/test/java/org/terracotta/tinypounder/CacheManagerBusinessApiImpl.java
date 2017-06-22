@@ -39,7 +39,6 @@ import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.Comparator;
 
-import static org.ehcache.config.builders.ResourcePoolsBuilder.heap;
 import static org.ehcache.config.builders.ResourcePoolsBuilder.newResourcePoolsBuilder;
 
 
