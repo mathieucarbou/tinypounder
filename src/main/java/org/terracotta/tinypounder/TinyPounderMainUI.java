@@ -22,6 +22,7 @@ import com.vaadin.server.VaadinRequest;
 import com.vaadin.spring.annotation.SpringUI;
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
+import com.vaadin.ui.CheckBox;
 import com.vaadin.ui.ComboBox;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.HorizontalLayout;
@@ -95,7 +96,7 @@ public class TinyPounderMainUI extends UI {
     ComboBox<Long> offHeapSizeComboBox = new ComboBox<>("Offheap size", offHeapValues);
     offHeapSizeComboBox.addStyleName("small-combo");
     offHeapSizeComboBox.setEmptySelectionAllowed(false);
-    offHeapSizeComboBox.setValue(offHeapValues.get(2));
+    offHeapSizeComboBox.setValue(offHeapValues.get(1));
     cacheCreation.addComponent(offHeapSizeComboBox);
 
     List<String> offHeapUnitValues = Arrays.asList("KB", "MB", "GB");
@@ -259,7 +260,10 @@ public class TinyPounderMainUI extends UI {
   private void addCacheManagerControls() {
 
     cacheManagerControls = new VerticalLayout();
-    HorizontalLayout mainCacheManagerControls = new HorizontalLayout();
+    HorizontalLayout currentCacheManagerControls = new HorizontalLayout();
+    HorizontalLayout createCacheManagerClusteredControls = new HorizontalLayout();
+    HorizontalLayout createCacheManagerDiskControls = new HorizontalLayout();
+    HorizontalLayout createCacheManagerInitializeControls = new HorizontalLayout();
 
 
     TextArea cacheManagerConfigTextArea = new TextArea();
@@ -275,22 +279,55 @@ public class TinyPounderMainUI extends UI {
     Label statusLabel = new Label();
     statusLabel.setValue(cacheManagerBusiness.getStatus());
 
+
     TextField terracottaUrlField = new TextField();
+    terracottaUrlField.setCaption("Terracotta host:port");
     terracottaUrlField.setValue("localhost:9510");
 
-    TextField cmNameField = new TextField();
-    cmNameField.setValue("TinyPounderCM");
+    terracottaUrlField.addValueChangeListener(valueChangeEvent -> {
+      boolean seemsAvailable = TerracottaServerBusiness.seemsAvailable(valueChangeEvent.getValue());
+      terracottaUrlField.setCaption(seemsAvailable == true ? "OPEN" : "CLOSED");
+    });
+
+    TextField clusterTierManagerNameField = new TextField();
+    clusterTierManagerNameField.setCaption("ClusterTierManager name");
+    clusterTierManagerNameField.setValue("TinyPounderCM");
+
+    CheckBox clusteredCheckBox = new CheckBox("Clustered", true);
+    clusteredCheckBox.addStyleName("align-bottom");
+    clusteredCheckBox.addValueChangeListener(valueChangeEvent -> {
+      if (valueChangeEvent.getValue() == true) {
+        terracottaUrlField.setEnabled(true);
+        clusterTierManagerNameField.setEnabled(true);
+      } else {
+        terracottaUrlField.setEnabled(false);
+        clusterTierManagerNameField.setEnabled(false);
+      }
+    });
+
 
     TextField diskPersistenceLocationField = new TextField();
+    diskPersistenceLocationField.setCaption("Local disk folder");
     diskPersistenceLocationField.setValue("tinyPounderDiskPersistence");
 
-    Button createCacheManager = new Button("Initialize CacheManager");
-    createCacheManager.addClickListener(event -> {
+    CheckBox diskCheckBox = new CheckBox("Local disk", true);
+    diskCheckBox.addStyleName("align-bottom");
+    diskCheckBox.addValueChangeListener(valueChangeEvent -> {
+      if (valueChangeEvent.getValue() == true) {
+        diskPersistenceLocationField.setEnabled(true);
+      } else {
+        diskPersistenceLocationField.setEnabled(false);
+      }
+    });
+
+    Button createCacheManagerButton = new Button("Initialize CacheManager");
+    createCacheManagerButton.addStyleName("align-bottom");
+
+    createCacheManagerButton.addClickListener(event -> {
       try {
-        cacheManagerBusiness.initializeCacheManager(terracottaUrlField.getValue(), cmNameField.getValue(), diskPersistenceLocationField.getValue());
+        cacheManagerBusiness.initializeCacheManager(clusteredCheckBox.getValue() == false ? null : terracottaUrlField.getValue(), clusterTierManagerNameField.getValue(), diskCheckBox.getValue() == false ? null : diskPersistenceLocationField.getValue());
         cacheManagerConfigTextArea.setValue(cacheManagerBusiness.retrieveHumanReadableConfiguration());
-        statusLabel.setValue(cacheManagerBusiness.getStatus());
-        refreshCacheControls();
+        refreshCacheManagerControls();
       } catch (Exception e) {
         displayErrorNotification("CacheManager could not be initialized!", ExceptionUtils.getRootCauseMessage(e));
       }
@@ -321,12 +358,27 @@ public class TinyPounderMainUI extends UI {
       }
     });
 
-    mainCacheManagerControls.addComponentsAndExpand(statusLabel, terracottaUrlField, cmNameField, diskPersistenceLocationField, createCacheManager, closeCacheManager, destroyCacheManager);
-    cacheManagerControls.addComponentsAndExpand(mainCacheManagerControls, popupView);
+    if (cacheManagerBusiness.getStatus().equals("UNINITIALIZED") || cacheManagerBusiness.getStatus().equals("NO CACHE MANAGER")) {
+      closeCacheManager.setEnabled(false);
+    } else {
+      createCacheManagerButton.setEnabled(false);
+    }
+
+    if (cacheManagerBusiness.getStatus().equals("NO CACHE MANAGER")) {
+      destroyCacheManager.setEnabled(false);
+    }
+
+    currentCacheManagerControls.addComponentsAndExpand(statusLabel, popupView, closeCacheManager, destroyCacheManager);
+    createCacheManagerClusteredControls.addComponentsAndExpand(clusteredCheckBox, terracottaUrlField, clusterTierManagerNameField, createCacheManagerButton);
+    createCacheManagerDiskControls.addComponentsAndExpand(diskCheckBox, diskPersistenceLocationField);
+    createCacheManagerInitializeControls.addComponentsAndExpand(createCacheManagerButton);
+    cacheManagerControls.addComponentsAndExpand(currentCacheManagerControls);
     mainLayout.addComponent(cacheManagerControls);
 
     if (cacheManagerBusiness.isCacheManagerAlive()) {
       addCacheControls();
+    } else {
+      cacheManagerControls.addComponentsAndExpand(createCacheManagerClusteredControls, createCacheManagerDiskControls, createCacheManagerInitializeControls);
     }
 
   }

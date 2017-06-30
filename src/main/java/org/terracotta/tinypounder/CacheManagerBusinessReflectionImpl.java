@@ -213,24 +213,31 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
   }
 
   @Override
-  public void initializeCacheManager(String terracottaServerUrl, String cmName, String tinyPounderDiskPersistenceLocation) {
-
-    URI clusterUri = URI.create("terracotta://" + terracottaServerUrl + "/" + cmName);
-
-
-    File tinyPounderDiskPersistenceLocationFolder = new File(tinyPounderDiskPersistenceLocation);
-    if (tinyPounderDiskPersistenceLocationFolder.exists()) {
-      try {
-        deleteFolder(tinyPounderDiskPersistenceLocation);
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
-
+  public void initializeCacheManager(String terracottaServerUrl, String cmName, String diskPersistenceLocation) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
-      Object clusteringServiceConfigurationBuilder = constructEnterpriseClusteringServiceConfigurationBuilder(cmName, clusterUri, kitAwareClassLoaderDelegator.isEEKit());
-      Object cacheManagerPersistenceConfiguration = constructCacheManagerPersistenceConfiguration(tinyPounderDiskPersistenceLocationFolder);
+      Object clusteringServiceConfigurationBuilder;
+      if (terracottaServerUrl != null) {
+        URI clusterUri = URI.create("terracotta://" + terracottaServerUrl + "/" + cmName);
+        clusteringServiceConfigurationBuilder = constructClusteringServiceConfigurationBuilder(cmName, clusterUri, kitAwareClassLoaderDelegator.isEEKit());
+      } else {
+        clusteringServiceConfigurationBuilder = null;
+      }
+
+      Object cacheManagerPersistenceConfiguration;
+      if (diskPersistenceLocation != null) {
+        File tinyPounderDiskPersistenceLocationFolder = new File(diskPersistenceLocation);
+        if (tinyPounderDiskPersistenceLocationFolder.exists()) {
+          try {
+            deleteFolder(diskPersistenceLocation);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        }
+        cacheManagerPersistenceConfiguration = constructCacheManagerPersistenceConfiguration(tinyPounderDiskPersistenceLocationFolder);
+      } else {
+        cacheManagerPersistenceConfiguration = null;
+      }
       Object cacheManager;
       if (kitAwareClassLoaderDelegator.isEEKit()) {
         Object defaultManagementRegistryConfiguration = constructDefaultManagementRegistryConfiguration(cmName);
@@ -280,8 +287,12 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
 
 
     Object cacheManagerBuilder = newCacheManagerBuilderMethod.invoke(null);
-    cacheManagerBuilder = withBuilderMethod.invoke(cacheManagerBuilder, enterpriseClusteringServiceConfigurationBuilder);
-    cacheManagerBuilder = withConfigurationMethod.invoke(cacheManagerBuilder, cacheManagerPersistenceConfiguration);
+    if (enterpriseClusteringServiceConfigurationBuilder != null) {
+      cacheManagerBuilder = withBuilderMethod.invoke(cacheManagerBuilder, enterpriseClusteringServiceConfigurationBuilder);
+    }
+    if (cacheManagerPersistenceConfiguration != null) {
+      cacheManagerBuilder = withConfigurationMethod.invoke(cacheManagerBuilder, cacheManagerPersistenceConfiguration);
+    }
     if (defaultManagementRegistryConfiguration != null) {
       Method usingMethod = cacheManagerBuilderClass.getMethod("using", serviceCreationConfigurationClass);
       cacheManagerBuilder = usingMethod.invoke(cacheManagerBuilder, defaultManagementRegistryConfiguration);
@@ -290,7 +301,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
     return buildMethod.invoke(cacheManagerBuilder);
   }
 
-  private Object constructEnterpriseClusteringServiceConfigurationBuilder(String cmName, URI clusterUri, boolean eeKit) throws IllegalAccessException, InvocationTargetException, ClassNotFoundException, NoSuchMethodException {
+  private Object constructClusteringServiceConfigurationBuilder(String clusterTierManagerName, URI clusterUri, boolean eeKit) throws IllegalAccessException, InvocationTargetException, ClassNotFoundException, NoSuchMethodException {
 
     Class<?> memoryUnitClass = loadClass("org.ehcache.config.units.MemoryUnit");
     Method valueOfMethod = memoryUnitClass.getMethod("valueOf", String.class);
@@ -311,7 +322,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       Method restartableMethod = enterpriseServerSideConfigurationBuilderClass.getMethod("restartable", String.class);
 
 
-      Object enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve("/SEFor" + cmName));
+      Object enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve(clusterTierManagerName));
       Object enterpriseServerSideConfigurationBuilder = autoCreateMethod.invoke(enterpriseClusteringServiceConfigurationBuilder);
       enterpriseServerSideConfigurationBuilder = defaultServerResourceMethod.invoke(enterpriseServerSideConfigurationBuilder, "primary-server-resource");
       enterpriseServerSideConfigurationBuilder = resourcePoolMethod4.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-a", 128L, mB, "secondary-server-resource");
@@ -329,7 +340,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       Method resourcePoolMethod3 = serverSideConfigurationBuilderClass.getMethod("resourcePool", String.class, long.class, memoryUnitClass);
 
 
-      Object enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve("/SEFor" + cmName));
+      Object enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve(clusterTierManagerName));
       Object enterpriseServerSideConfigurationBuilder = autoCreateMethod.invoke(enterpriseClusteringServiceConfigurationBuilder);
       enterpriseServerSideConfigurationBuilder = defaultServerResourceMethod.invoke(enterpriseServerSideConfigurationBuilder, "primary-server-resource");
       enterpriseServerSideConfigurationBuilder = resourcePoolMethod4.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-a", 128L, mB, "secondary-server-resource");
