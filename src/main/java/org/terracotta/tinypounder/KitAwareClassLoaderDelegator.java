@@ -15,6 +15,7 @@
  */
 package org.terracotta.tinypounder;
 
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -43,13 +44,25 @@ public class KitAwareClassLoaderDelegator {
   }
 
   private static URL[] discoverKitClientJars(String kitPath) throws Exception {
-    Stream<Path> clientEhcacheJarStream = Files.walk(Paths.get(kitPath, "/client/ehcache"), 4, FileVisitOption.FOLLOW_LINKS)
-        .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
-    Stream<Path> clientStoreJarStream = Files.walk(Paths.get(kitPath, "/client/store"), 4, FileVisitOption.FOLLOW_LINKS)
-        .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
+    Stream<Path> clientEhcacheJarStream = null;
+    try {
+      clientEhcacheJarStream = Files.walk(Paths.get(kitPath, "/client/ehcache"), 4, FileVisitOption.FOLLOW_LINKS)
+          .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
+    } catch (IOException e) {
+      // that's fine, it's probably just a kit without ehcache
+    }
+    Stream<Path> clientStoreJarStream = null;
+    try {
+      clientStoreJarStream = Files.walk(Paths.get(kitPath, "/client/store"), 4, FileVisitOption.FOLLOW_LINKS)
+          .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
+    } catch (IOException e) {
+      // that's fine, it's probably just a kit without tc store
+    }
     Stream<Path> clientLibJarStream = Files.walk(Paths.get(kitPath, "/client/lib"), 4, FileVisitOption.FOLLOW_LINKS)
         .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
-    return Stream.concat(Stream.concat(clientEhcacheJarStream, clientLibJarStream), clientStoreJarStream).map(path -> {
+    Stream<Path> concat = clientEhcacheJarStream != null ? Stream.concat(clientEhcacheJarStream, clientLibJarStream) : clientLibJarStream;
+    concat = clientStoreJarStream != null ? Stream.concat(concat, clientStoreJarStream) : concat;
+    return concat.map(path -> {
       try {
         return new URL("file:" + path.toFile().getAbsolutePath());
       } catch (MalformedURLException e) {
@@ -60,9 +73,9 @@ public class KitAwareClassLoaderDelegator {
   }
 
   public void setKitPathAndUpdate(String kitPath) throws Exception {
-    this.kitPath = kitPath;
     URL[] urls = discoverKitClientJars(kitPath);
     urlClassLoader = URLClassLoader.newInstance(urls, Thread.currentThread().getContextClassLoader());
+    this.kitPath = kitPath;
   }
 
   public boolean containsTerracottaStore() {

@@ -36,6 +36,7 @@ import com.vaadin.ui.UI;
 import com.vaadin.ui.VerticalLayout;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -73,21 +74,26 @@ public class TinyPounderMainUI extends UI {
   protected void init(VaadinRequest vaadinRequest) {
     setupLayout();
     addKitControls();
+    initCacheLayout();
+    initDatasetLayout();
+  }
 
-    if (kitAwareClassLoaderDelegator.containsEhcache()) {
-      cacheLayout = new VerticalLayout();
-      cacheLayout.addStyleName("cache-layout");
-      mainLayout.addComponent(cacheLayout);
-      addCacheManagerControls();
-    }
-
-    if (kitAwareClassLoaderDelegator.containsTerracottaStore()) {
+  private void initDatasetLayout() {
+    if (kitAwareClassLoaderDelegator.containsTerracottaStore() && datasetLayout == null) {
       datasetLayout = new VerticalLayout();
       datasetLayout.addStyleName("dataset-layout");
       mainLayout.addComponent(datasetLayout);
       addDatasetManagerControls();
     }
+  }
 
+  private void initCacheLayout() {
+    if (kitAwareClassLoaderDelegator.containsEhcache() && cacheLayout == null) {
+      cacheLayout = new VerticalLayout();
+      cacheLayout.addStyleName("cache-layout");
+      mainLayout.addComponent(cacheLayout);
+      addCacheManagerControls();
+    }
   }
 
   private void addCacheControls() {
@@ -426,9 +432,14 @@ public class TinyPounderMainUI extends UI {
       try {
         kitAwareClassLoaderDelegator.setKitPathAndUpdate(kitPath.getValue());
         info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise" : "Open source") + " kit at : " + kitAwareClassLoaderDelegator.getKitPath());
-        refreshCacheManagerControls();
+        initCacheLayout();
+        initDatasetLayout();
       } catch (Exception e) {
-        displayErrorNotification("Kit path could not update !", ExceptionUtils.getRootCauseMessage(e));
+        if (e instanceof NoSuchFileException) {
+          displayErrorNotification("Kit path could not update !", "Make sure the path points to a kit !");
+        } else {
+          displayErrorNotification("Kit path could not update !", ExceptionUtils.getRootCauseMessage(e));
+        }
 
       }
     });
