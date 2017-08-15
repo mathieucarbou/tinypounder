@@ -45,9 +45,11 @@ public class KitAwareClassLoaderDelegator {
   private static URL[] discoverKitClientJars(String kitPath) throws Exception {
     Stream<Path> clientEhcacheJarStream = Files.walk(Paths.get(kitPath, "/client/ehcache"), 4, FileVisitOption.FOLLOW_LINKS)
         .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
+    Stream<Path> clientStoreJarStream = Files.walk(Paths.get(kitPath, "/client/store"), 4, FileVisitOption.FOLLOW_LINKS)
+        .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
     Stream<Path> clientLibJarStream = Files.walk(Paths.get(kitPath, "/client/lib"), 4, FileVisitOption.FOLLOW_LINKS)
         .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
-    return Stream.concat(clientEhcacheJarStream, clientLibJarStream).map(path -> {
+    return Stream.concat(Stream.concat(clientEhcacheJarStream, clientLibJarStream), clientStoreJarStream).map(path -> {
       try {
         return new URL("file:" + path.toFile().getAbsolutePath());
       } catch (MalformedURLException e) {
@@ -63,7 +65,16 @@ public class KitAwareClassLoaderDelegator {
     urlClassLoader = URLClassLoader.newInstance(urls, Thread.currentThread().getContextClassLoader());
   }
 
-  public boolean isProperlyInitialized() {
+  public boolean containsTerracottaStore() {
+    try {
+      urlClassLoader.loadClass("com.terracottatech.store.manager.DatasetManager");
+      return true;
+    } catch (ClassNotFoundException e) {
+      return false;
+    }
+  }
+
+  public boolean containsEhcache() {
     try {
       urlClassLoader.loadClass("org.ehcache.CacheManager");
       return true;

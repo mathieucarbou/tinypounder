@@ -18,6 +18,23 @@
     text-align: center !important;
 }
 
+.v-slot-cache-layout {
+    background-color: aquamarine;
+}
+
+.v-slot-dataset-layout {
+    background-color: beige;
+}
+
+.v-slot-shift-bottom-right-offheap {
+    top: 35px;
+    left: 120px;
+}
+
+.v-slot-shift-bottom-right-disk {
+    top: 35px;
+    left: 140px;
+}
 /*.v-widget {*/
 /*vertical-align: bottom!important;*/
 /*}*/

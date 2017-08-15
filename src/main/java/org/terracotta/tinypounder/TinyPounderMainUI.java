@@ -39,6 +39,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The UI class
@@ -50,21 +51,43 @@ import java.util.List;
 @SpringUI
 public class TinyPounderMainUI extends UI {
 
-
   @Autowired
   private CacheManagerBusiness cacheManagerBusiness;
+
+  @Autowired
+  private DatasetManagerBusinessReflectionImpl datasetManagerBusiness;
 
   @Autowired
   private KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator;
 
   private VerticalLayout mainLayout;
+  private VerticalLayout cacheLayout;
+  private VerticalLayout datasetLayout;
+
   private VerticalLayout cacheControls;
+  private VerticalLayout datasetControls;
   private VerticalLayout cacheManagerControls;
+  private VerticalLayout datasetManagerControls;
 
   @Override
   protected void init(VaadinRequest vaadinRequest) {
     setupLayout();
     addKitControls();
+
+    if (kitAwareClassLoaderDelegator.containsEhcache()) {
+      cacheLayout = new VerticalLayout();
+      cacheLayout.addStyleName("cache-layout");
+      mainLayout.addComponent(cacheLayout);
+      addCacheManagerControls();
+    }
+
+    if (kitAwareClassLoaderDelegator.containsTerracottaStore()) {
+      datasetLayout = new VerticalLayout();
+      datasetLayout.addStyleName("dataset-layout");
+      mainLayout.addComponent(datasetLayout);
+      addDatasetManagerControls();
+    }
+
   }
 
   private void addCacheControls() {
@@ -158,7 +181,7 @@ public class TinyPounderMainUI extends UI {
 
         cacheManagerBusiness.createCache(cacheNameField.getValue(), cacheConfiguration);
         cacheNames.add(cacheNameField.getValue());
-        refreshStuff(listDataProvider);
+        refreshCacheStuff(listDataProvider);
         cacheNameField.clear();
         Notification notification = new Notification("Cache added with success !",
             Notification.Type.TRAY_NOTIFICATION);
@@ -194,14 +217,14 @@ public class TinyPounderMainUI extends UI {
         try {
           cacheManagerBusiness.removeCache(cacheName);
           cacheNames.remove(cacheName);
-          refreshStuff(listDataProvider);
+          refreshCacheStuff(listDataProvider);
           Notification notification = new Notification("Cache removed with success !",
               Notification.Type.TRAY_NOTIFICATION);
           notification.setStyleName("warning");
           notification.show(Page.getCurrent());
         } catch (RuntimeException e) {
           displayErrorNotification("Cache could not be removed !", ExceptionUtils.getRootCauseMessage(e));
-          refreshStuff(listDataProvider);
+          refreshCacheStuff(listDataProvider);
         }
       });
 
@@ -210,14 +233,14 @@ public class TinyPounderMainUI extends UI {
         try {
           cacheManagerBusiness.destroyCache(cacheName);
           cacheNames.remove(cacheName);
-          refreshStuff(listDataProvider);
+          refreshCacheStuff(listDataProvider);
           Notification notification = new Notification("Cache destroyed with success !",
               Notification.Type.TRAY_NOTIFICATION);
           notification.setStyleName("warning");
           notification.show(Page.getCurrent());
         } catch (Exception e) {
           displayErrorNotification("Cache could not be destroyed !", ExceptionUtils.getRootCauseMessage(e));
-          refreshStuff(listDataProvider);
+          refreshCacheStuff(listDataProvider);
         }
       });
       cacheInfo.addComponentsAndExpand(cacheNameLabel, poundingSlider, removeCacheButton, destroyCacheButton);
@@ -225,7 +248,7 @@ public class TinyPounderMainUI extends UI {
     }
 
 
-    mainLayout.addComponent(cacheControls);
+    cacheLayout.addComponent(cacheControls);
 
   }
 
@@ -281,12 +304,13 @@ public class TinyPounderMainUI extends UI {
 
 
     TextField terracottaUrlField = new TextField();
-    terracottaUrlField.setCaption("Terracotta host:port");
-    terracottaUrlField.setValue("localhost:9510");
+    terracottaUrlField.setValue("localhost:9410");
+    boolean seemsAvailable = TerracottaServerBusiness.seemsAvailable(terracottaUrlField.getValue());
+    terracottaUrlField.setCaption("Terracotta host:port" + (seemsAvailable ? " OPEN" : " CLOSED"));
 
     terracottaUrlField.addValueChangeListener(valueChangeEvent -> {
-      boolean seemsAvailable = TerracottaServerBusiness.seemsAvailable(valueChangeEvent.getValue());
-      terracottaUrlField.setCaption(seemsAvailable == true ? "OPEN" : "CLOSED");
+      boolean nowSeemsAvailable = TerracottaServerBusiness.seemsAvailable(valueChangeEvent.getValue());
+      terracottaUrlField.setCaption("Terracotta host:port" + (nowSeemsAvailable ? " OPEN" : " CLOSED"));
     });
 
     TextField clusterTierManagerNameField = new TextField();
@@ -296,7 +320,7 @@ public class TinyPounderMainUI extends UI {
     CheckBox clusteredCheckBox = new CheckBox("Clustered", true);
     clusteredCheckBox.addStyleName("align-bottom");
     clusteredCheckBox.addValueChangeListener(valueChangeEvent -> {
-      if (valueChangeEvent.getValue() == true) {
+      if (valueChangeEvent.getValue()) {
         terracottaUrlField.setEnabled(true);
         clusterTierManagerNameField.setEnabled(true);
       } else {
@@ -313,7 +337,7 @@ public class TinyPounderMainUI extends UI {
     CheckBox diskCheckBox = new CheckBox("Local disk", true);
     diskCheckBox.addStyleName("align-bottom");
     diskCheckBox.addValueChangeListener(valueChangeEvent -> {
-      if (valueChangeEvent.getValue() == true) {
+      if (valueChangeEvent.getValue()) {
         diskPersistenceLocationField.setEnabled(true);
       } else {
         diskPersistenceLocationField.setEnabled(false);
@@ -325,7 +349,7 @@ public class TinyPounderMainUI extends UI {
 
     createCacheManagerButton.addClickListener(event -> {
       try {
-        cacheManagerBusiness.initializeCacheManager(clusteredCheckBox.getValue() == false ? null : terracottaUrlField.getValue(), clusterTierManagerNameField.getValue(), diskCheckBox.getValue() == false ? null : diskPersistenceLocationField.getValue());
+        cacheManagerBusiness.initializeCacheManager(!clusteredCheckBox.getValue() ? null : terracottaUrlField.getValue(), clusterTierManagerNameField.getValue(), !diskCheckBox.getValue() ? null : diskPersistenceLocationField.getValue());
         cacheManagerConfigTextArea.setValue(cacheManagerBusiness.retrieveHumanReadableConfiguration());
         refreshCacheManagerControls();
       } catch (Exception e) {
@@ -373,7 +397,7 @@ public class TinyPounderMainUI extends UI {
     createCacheManagerDiskControls.addComponentsAndExpand(diskCheckBox, diskPersistenceLocationField);
     createCacheManagerInitializeControls.addComponentsAndExpand(createCacheManagerButton);
     cacheManagerControls.addComponentsAndExpand(currentCacheManagerControls);
-    mainLayout.addComponent(cacheManagerControls);
+    cacheLayout.addComponent(cacheManagerControls);
 
     if (cacheManagerBusiness.isCacheManagerAlive()) {
       addCacheControls();
@@ -412,16 +436,246 @@ public class TinyPounderMainUI extends UI {
     kitControlsLayout.addComponent(info);
     kitControlsLayout.addComponent(kitPathLayout);
     mainLayout.addComponent(kitControlsLayout);
+  }
 
-    if (kitAwareClassLoaderDelegator.isProperlyInitialized()) {
-      addCacheManagerControls();
+  private void addDatasetManagerControls() {
+
+    datasetManagerControls = new VerticalLayout();
+    HorizontalLayout currentDatasetControls = new HorizontalLayout();
+    HorizontalLayout createDatasetClusteredControls = new HorizontalLayout();
+    HorizontalLayout createDatasetIndexesControls = new HorizontalLayout();
+    HorizontalLayout createDatasetInitializeControls = new HorizontalLayout();
+
+    Label statusLabel = new Label();
+    statusLabel.setValue(datasetManagerBusiness.getStatus());
+
+
+    TextField terracottaUrlField = new TextField();
+    terracottaUrlField.setValue("localhost:9410");
+    boolean seemsAvailable = TerracottaServerBusiness.seemsAvailable(terracottaUrlField.getValue());
+    terracottaUrlField.setCaption("Terracotta host:port" + (seemsAvailable ? " OPEN" : " CLOSED"));
+
+    terracottaUrlField.addValueChangeListener(valueChangeEvent -> {
+      boolean nowSeemsAvailable = TerracottaServerBusiness.seemsAvailable(valueChangeEvent.getValue());
+      terracottaUrlField.setCaption("Terracotta host:port" + (nowSeemsAvailable ? " OPEN" : " CLOSED"));
+    });
+
+    CheckBox clusteredCheckBox = new CheckBox("Clustered", true);
+    clusteredCheckBox.setEnabled(false);
+    clusteredCheckBox.addStyleName("align-bottom");
+
+    Button initializeDatasetManager = new Button("Initialize DatasetManager");
+    initializeDatasetManager.addStyleName("align-bottom");
+
+    initializeDatasetManager.addClickListener(event -> {
+      try {
+        datasetManagerBusiness.initializeDatasetManager(!clusteredCheckBox.getValue() ? null : terracottaUrlField.getValue());
+        refreshDatasetManagerControls();
+      } catch (Exception e) {
+        displayErrorNotification("DatasetManager could not be initialized!", ExceptionUtils.getRootCauseMessage(e));
+      }
+    });
+
+    Button closeDatasetManager = new Button("Close DatasetManager");
+    closeDatasetManager.addClickListener(event -> {
+      try {
+        datasetManagerBusiness.close();
+        refreshDatasetControls();
+        refreshDatasetManagerControls();
+      } catch (Exception e) {
+        displayErrorNotification("DatasetManager could not be closed!", ExceptionUtils.getRootCauseMessage(e));
+      }
+    });
+
+    if (datasetManagerBusiness.getStatus().equals("CLOSED") || datasetManagerBusiness.getStatus().equals("NO DATASET MANAGER")) {
+      closeDatasetManager.setEnabled(false);
+    } else {
+      initializeDatasetManager.setEnabled(false);
+    }
+
+
+    currentDatasetControls.addComponentsAndExpand(statusLabel, closeDatasetManager);
+    createDatasetClusteredControls.addComponentsAndExpand(clusteredCheckBox, terracottaUrlField, initializeDatasetManager);
+    createDatasetInitializeControls.addComponentsAndExpand(initializeDatasetManager);
+    datasetManagerControls.addComponentsAndExpand(currentDatasetControls);
+    datasetLayout.addComponent(datasetManagerControls);
+
+    if (datasetManagerBusiness.isDatasetManagerAlive()) {
+      addDatasetControls();
+    } else {
+      datasetManagerControls.addComponentsAndExpand(createDatasetClusteredControls, createDatasetIndexesControls, createDatasetInitializeControls);
     }
 
   }
 
+  private void addDatasetControls() {
+    List<String> datasetNames = new ArrayList<>(datasetManagerBusiness.retrieveDatasetNames());
+    datasetControls = new VerticalLayout();
+    VerticalLayout datasetListLayout = new VerticalLayout();
+    HorizontalLayout datasetCreation = new HorizontalLayout();
+    datasetControls.addComponentsAndExpand(datasetListLayout, datasetCreation);
+
+    TextField datasetNameField = new TextField();
+    datasetNameField.setPlaceholder("dataset name");
+    datasetNameField.addStyleName("align-bottom");
+
+    TextField offHeapPersistenceLocationField = new TextField();
+    CheckBox offHeapCheckBox = new CheckBox("offheap", true);
+    offHeapCheckBox.addStyleName("shift-bottom-right-offheap");
+    offHeapCheckBox.addValueChangeListener(valueChangeEvent -> {
+      if (valueChangeEvent.getValue()) {
+        offHeapPersistenceLocationField.setEnabled(true);
+      } else {
+        offHeapPersistenceLocationField.setEnabled(false);
+      }
+    });
+    offHeapPersistenceLocationField.setCaption("offheap resource name");
+    offHeapPersistenceLocationField.setValue("primary-server-resource");
+
+
+    TextField diskPersistenceLocationField = new TextField();
+    CheckBox diskCheckBox = new CheckBox("disk", true);
+    diskCheckBox.addStyleName("shift-bottom-right-disk");
+    diskCheckBox.addValueChangeListener(valueChangeEvent -> {
+      if (valueChangeEvent.getValue()) {
+        diskPersistenceLocationField.setEnabled(true);
+      } else {
+        diskPersistenceLocationField.setEnabled(false);
+      }
+    });
+    diskPersistenceLocationField.setCaption("disk resource name");
+    diskPersistenceLocationField.setValue("dataroot");
+
+    CheckBox indexCheckBox = new CheckBox("use index", true);
+    indexCheckBox.addStyleName("shift-bottom-right-disk");
+
+    Button addDatasetButton = new Button("Add dataset");
+    addDatasetButton.addStyleName("align-bottom");
+
+    datasetCreation.addComponentsAndExpand(datasetNameField, offHeapCheckBox, offHeapPersistenceLocationField, diskCheckBox, diskPersistenceLocationField, indexCheckBox, addDatasetButton);
+    ListDataProvider<String> listDataProvider = new ListDataProvider<>(datasetNames);
+    addDatasetButton.addClickListener(clickEvent -> {
+      try {
+        DatasetConfiguration datasetConfiguration = new DatasetConfiguration(offHeapPersistenceLocationField.getValue(), diskPersistenceLocationField.getValue(), indexCheckBox.getValue());
+        datasetManagerBusiness.createDataset(datasetNameField.getValue(), datasetConfiguration);
+        datasetNames.add(datasetNameField.getValue());
+        refreshDatasetStuff(listDataProvider);
+        datasetNameField.clear();
+        Notification notification = new Notification("Dataset added with success !",
+            Notification.Type.TRAY_NOTIFICATION);
+        notification.setStyleName("warning");
+        notification.show(Page.getCurrent());
+      } catch (RuntimeException e) {
+        displayErrorNotification("Dataset could not be added !", ExceptionUtils.getRootCauseMessage(e));
+      }
+    });
+
+    for (String datasetName : datasetNames) {
+      HorizontalLayout datasetInfoLabel = new HorizontalLayout();
+      Label datasetNameLabel = new Label(datasetName);
+
+      Button addDatasetInstanceButton = new Button("Add dataset instance");
+      addDatasetInstanceButton.addClickListener(event -> {
+        try {
+          String datasetInstanceName = datasetManagerBusiness.createDatasetInstance(datasetName);
+          refreshDatasetStuff(listDataProvider);
+          Notification notification = new Notification("Dataset instance " + datasetInstanceName + " created  with success !",
+              Notification.Type.TRAY_NOTIFICATION);
+          notification.setStyleName("warning");
+          notification.show(Page.getCurrent());
+        } catch (Exception e) {
+          displayErrorNotification("Dataset instance could not be created !", ExceptionUtils.getRootCauseMessage(e));
+          refreshDatasetStuff(listDataProvider);
+        }
+      });
+
+      Button destroyDatasetButton = new Button("Destroy dataset");
+      destroyDatasetButton.addClickListener(event -> {
+        try {
+          datasetManagerBusiness.destroyDataset(datasetName);
+          datasetNames.remove(datasetName);
+          refreshDatasetStuff(listDataProvider);
+          Notification notification = new Notification("Dataset destroyed with success !",
+              Notification.Type.TRAY_NOTIFICATION);
+          notification.setStyleName("warning");
+          notification.show(Page.getCurrent());
+        } catch (Exception e) {
+          displayErrorNotification("Dataset could not be destroyed !", ExceptionUtils.getRootCauseMessage(e));
+          refreshDatasetStuff(listDataProvider);
+        }
+      });
+
+
+      datasetInfoLabel.addComponentsAndExpand(datasetNameLabel, addDatasetInstanceButton, destroyDatasetButton);
+      datasetListLayout.addComponent(datasetInfoLabel);
+
+      Set<String> datasetInstanceNames = datasetManagerBusiness.getDatasetInstanceNames(datasetName);
+      if (datasetInstanceNames.size() > 0) {
+        destroyDatasetButton.setEnabled(false);
+      }
+      for (String instanceName : datasetInstanceNames) {
+        HorizontalLayout datasetInstanceInfoLayout = new HorizontalLayout();
+        Label datasetInstanceNameLabel = new Label(instanceName);
+        Button closeDatasetButton = new Button("Close dataset instance");
+        closeDatasetButton.addClickListener(event -> {
+          try {
+            datasetManagerBusiness.closeDatasetInstance(datasetName, instanceName);
+            refreshDatasetStuff(listDataProvider);
+            Notification notification = new Notification("Dataset instance closed with success !",
+                Notification.Type.TRAY_NOTIFICATION);
+            notification.setStyleName("warning");
+            notification.show(Page.getCurrent());
+          } catch (Exception e) {
+            displayErrorNotification("Dataset instance could not be closed !", ExceptionUtils.getRootCauseMessage(e));
+            refreshDatasetStuff(listDataProvider);
+          }
+        });
+
+        Slider poundingSlider = new Slider();
+        poundingSlider.setCaption("NOT POUNDING");
+        poundingSlider.addStyleName("pounding-slider");
+        if (datasetManagerBusiness.retrievePoundingIntensity(instanceName) > 0) {
+          poundingSlider.setValue((double) datasetManagerBusiness.retrievePoundingIntensity(instanceName));
+          updatePoundingCaption(poundingSlider, datasetManagerBusiness.retrievePoundingIntensity(instanceName));
+        }
+        poundingSlider.setMin(0);
+        poundingSlider.setMax(11);
+        poundingSlider.addValueChangeListener(event -> {
+          int poundingIntensity = event.getValue().intValue();
+          datasetManagerBusiness.updatePoundingIntensity(instanceName, poundingIntensity);
+          updatePoundingCaption(poundingSlider, poundingIntensity);
+        });
+
+
+        datasetInstanceInfoLayout.addComponentsAndExpand(datasetInstanceNameLabel, poundingSlider, closeDatasetButton);
+        datasetListLayout.addComponent(datasetInstanceInfoLayout);
+      }
+
+
+    }
+    datasetLayout.addComponent(datasetControls);
+  }
+
+  private void refreshDatasetControls() {
+
+  }
+
+  private void refreshDatasetManagerControls() {
+    if (kitAwareClassLoaderDelegator.containsTerracottaStore()) {
+      if (datasetManagerControls != null) {
+        datasetLayout.removeComponent(datasetManagerControls);
+        if (datasetControls != null) {
+          datasetLayout.removeComponent(datasetControls);
+        }
+
+      }
+      addDatasetManagerControls();
+    }
+  }
+
   private void refreshCacheControls() {
     if (cacheControls != null) {
-      mainLayout.removeComponent(cacheControls);
+      cacheLayout.removeComponent(cacheControls);
     }
     if (cacheManagerBusiness.isCacheManagerAlive()) {
       addCacheControls();
@@ -430,11 +684,11 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void refreshCacheManagerControls() {
-    if (kitAwareClassLoaderDelegator.isProperlyInitialized()) {
+    if (kitAwareClassLoaderDelegator.containsEhcache()) {
       if (cacheManagerControls != null) {
-        mainLayout.removeComponent(cacheManagerControls);
+        cacheLayout.removeComponent(cacheManagerControls);
         if (cacheControls != null) {
-          mainLayout.removeComponent(cacheControls);
+          cacheLayout.removeComponent(cacheControls);
         }
 
       }
@@ -442,9 +696,14 @@ public class TinyPounderMainUI extends UI {
     }
   }
 
-  private void refreshStuff(ListDataProvider<String> listDataProvider) {
+  private void refreshCacheStuff(ListDataProvider<String> listDataProvider) {
     listDataProvider.refreshAll();
     refreshCacheManagerControls();
+  }
+
+  private void refreshDatasetStuff(ListDataProvider<String> listDataProvider) {
+    listDataProvider.refreshAll();
+    refreshDatasetManagerControls();
   }
 
   // Create a dynamically updating content for the popup
