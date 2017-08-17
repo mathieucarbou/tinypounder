@@ -18,12 +18,20 @@
     text-align: center !important;
 }
 
-.v-slot-cache-layout {
+.cache-layout {
     background-color: aquamarine;
 }
 
-.v-slot-dataset-layout {
+.dataset-layout {
     background-color: beige;
+}
+
+.voltron-config-layout {
+    background-color: #c8bde2;
+}
+
+.voltron-control-layout {
+    background-color: #e299a8;
 }
 
 .v-slot-shift-bottom-right-offheap {
@@ -40,6 +48,12 @@
     top: 35px;
     left: 6%;
 }
+
+.tc-config-xml {
+    font-family: monospace !important;
+    font-size: 11px !important;;
+}
+
 /*.v-widget {*/
 /*vertical-align: bottom!important;*/
 /*}*/

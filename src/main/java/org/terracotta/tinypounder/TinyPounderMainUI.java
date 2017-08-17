@@ -16,15 +16,19 @@
 package org.terracotta.tinypounder;
 
 import com.vaadin.annotations.StyleSheet;
+import com.vaadin.annotations.Title;
+import com.vaadin.data.HasValue;
 import com.vaadin.data.provider.ListDataProvider;
 import com.vaadin.server.Page;
 import com.vaadin.server.VaadinRequest;
 import com.vaadin.spring.annotation.SpringUI;
-import com.vaadin.ui.Alignment;
+import com.vaadin.ui.Accordion;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.CheckBox;
 import com.vaadin.ui.ComboBox;
 import com.vaadin.ui.Component;
+import com.vaadin.ui.FormLayout;
+import com.vaadin.ui.GridLayout;
 import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.Notification;
@@ -36,6 +40,10 @@ import com.vaadin.ui.UI;
 import com.vaadin.ui.VerticalLayout;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -47,10 +55,13 @@ import java.util.Set;
  * <p>
  * This class should never import anything from the Ehcache API
  */
-//@Theme("tinytheme")
+@Title("Tiny Pounder")
 @StyleSheet("tinypounder.css")
 @SpringUI
 public class TinyPounderMainUI extends UI {
+
+  private static final int MIN_SERVER_GRID_COLS = 3;
+  private static final int DATAROOT_PATH_COLUMN = 2;
 
   @Autowired
   private CacheManagerBusiness cacheManagerBusiness;
@@ -61,7 +72,7 @@ public class TinyPounderMainUI extends UI {
   @Autowired
   private KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator;
 
-  private VerticalLayout mainLayout;
+  private Accordion mainLayout;
   private VerticalLayout cacheLayout;
   private VerticalLayout datasetLayout;
 
@@ -69,20 +80,47 @@ public class TinyPounderMainUI extends UI {
   private VerticalLayout datasetControls;
   private VerticalLayout cacheManagerControls;
   private VerticalLayout datasetManagerControls;
+  private VerticalLayout voltronConfigLayout;
+  private VerticalLayout voltronControlLayout;
+  private VerticalLayout runtimeLayout;
+
+  private Slider stripes;
+  private Slider servers;
+  private GridLayout offheapGrid;
+  private Slider offheaps;
+  private GridLayout serverGrid;
+  private Slider reconnectWindow;
+  private GridLayout dataRootGrid;
+  private Slider dataRoots;
+  private CheckBox platformPersistence;
+  private CheckBox platformBackup;
+  private TextArea tcConfigXml;
 
   @Override
   protected void init(VaadinRequest vaadinRequest) {
     setupLayout();
     addKitControls();
-    initCacheLayout();
-    initDatasetLayout();
+    initVoltronConfigLayout();
+    initVoltronControlLayout();
+    initRuntimeLayout();
+  }
+
+  private void initRuntimeLayout() {
+    if (datasetLayout == null && cacheLayout == null
+        && (kitAwareClassLoaderDelegator.containsTerracottaStore() || kitAwareClassLoaderDelegator.containsEhcache())) {
+      runtimeLayout = new VerticalLayout();
+      mainLayout.addTab(runtimeLayout, "STEP 4: DATASETS & CACHES");
+
+      initCacheLayout();
+      initDatasetLayout();
+    }
   }
 
   private void initDatasetLayout() {
     if (kitAwareClassLoaderDelegator.containsTerracottaStore() && datasetLayout == null) {
       datasetLayout = new VerticalLayout();
       datasetLayout.addStyleName("dataset-layout");
-      mainLayout.addComponent(datasetLayout);
+      runtimeLayout.addComponentsAndExpand(datasetLayout);
       addDatasetManagerControls();
     }
   }
@@ -91,8 +129,378 @@ public class TinyPounderMainUI extends UI {
     if (kitAwareClassLoaderDelegator.containsEhcache() && cacheLayout == null) {
       cacheLayout = new VerticalLayout();
       cacheLayout.addStyleName("cache-layout");
-      mainLayout.addComponent(cacheLayout);
+      runtimeLayout.addComponentsAndExpand(cacheLayout);
       addCacheManagerControls();
+    }
+  }
+
+  private void initVoltronConfigLayout() {
+    if (kitAwareClassLoaderDelegator.getKitPath() != null && voltronConfigLayout == null) {
+      voltronConfigLayout = new VerticalLayout();
+      voltronConfigLayout.addStyleName("voltron-config-layout");
+      mainLayout.addTab(voltronConfigLayout, "STEP 2: SERVER CONFIGURATIONS");
+      addVoltronConfigControls();
+    }
+  }
+
+  private void initVoltronControlLayout() {
+    if (kitAwareClassLoaderDelegator.getKitPath() != null && voltronControlLayout == null) {
+      voltronControlLayout = new VerticalLayout();
+      voltronControlLayout.addStyleName("voltron-control-layout");
+      mainLayout.addTab(voltronControlLayout, "STEP 3: SERVER CONTROL");
+      addVoltronCommandsControls();
+    }
+  }
+
+  private void addVoltronCommandsControls() {
+
+  }
+
+  private void killAllServers() {
+
+  }
+
+  private void addVoltronConfigControls() {
+    VerticalLayout layout = new VerticalLayout();
+    boolean ee = kitAwareClassLoaderDelegator.isEEKit();
+
+    // offheap resources
+    {
+      int nOffheaps = 2;
+
+      offheapGrid = new GridLayout(2, nOffheaps + 1);
+
+      offheaps = new Slider(nOffheaps + " offheap resources", 1, 4);
+      offheaps.setValue((double) nOffheaps);
+      offheaps.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
+        offheaps.setCaption(event.getValue().intValue() + " stripes");
+        updateOffHeapGrid();
+      });
+      offheapGrid.addComponent(offheaps, 0, 0, 1, 0);
+
+      updateOffHeapGrid();
+
+      layout.addComponentsAndExpand(offheapGrid);
+    }
+
+    // ee stuff
+    if (ee) {
+      int nData = 2;
+
+      dataRootGrid = new GridLayout(3, nData + 1);
+      dataRootGrid.setWidth(100, Unit.PERCENTAGE);
+      dataRootGrid.setColumnExpandRatio(2, 2);
+
+      // data roots
+      dataRoots = new Slider(nData + " data roots", 1, 10);
+      dataRoots.setValue((double) nData);
+      dataRoots.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
+        dataRoots.setCaption(event.getValue().intValue() + " data roots");
+        updateDataRootGrid();
+      });
+      dataRootGrid.addComponent(dataRoots);
+
+      // platform persistence
+      platformPersistence = new CheckBox("Platform Persistence", true);
+      platformPersistence.addValueChangeListener(event -> platformPersistenceWanted(event.getValue()));
+      dataRootGrid.addComponent(platformPersistence);
+
+      // backup
+      platformBackup = new CheckBox("Platform Backup", true);
+      platformBackup.addValueChangeListener(event -> platformBackupWanted(event.getValue()));
+      dataRootGrid.addComponent(platformBackup);
+
+      updateDataRootGrid();
+      platformBackupWanted(true);
+      platformPersistenceWanted(true);
+
+      layout.addComponentsAndExpand(dataRootGrid);
+    }
+
+    // stripe / server form
+    {
+      int nStripes = ee ? 2 : 1;
+      int nServers = 2;
+      int nReconWin = 120;
+
+      serverGrid = new GridLayout(MIN_SERVER_GRID_COLS, nStripes + 1);
+      serverGrid.setWidth(100, Unit.PERCENTAGE);
+
+      stripes = new Slider(nStripes + " stripes", 1, ee ? 4 : 1);
+      stripes.setValue((double) nStripes);
+      stripes.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
+        stripes.setCaption(event.getValue().intValue() + " stripes");
+        updateServerGrid();
+      });
+      stripes.setReadOnly(!ee);
+      serverGrid.addComponent(stripes);
+
+      servers = new Slider(nServers + " servers per stripe", 1, 4);
+      servers.setValue((double) nServers);
+      servers.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
+        servers.setCaption(event.getValue().intValue() + " servers per stripe");
+        updateServerGrid();
+      });
+      serverGrid.addComponent(servers);
+
+      reconnectWindow = new Slider("Reconnect window: " + nReconWin + " seconds", 5, 300);
+      reconnectWindow.setValue((double) nReconWin);
+      reconnectWindow.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
+        reconnectWindow.setCaption("Reconnect window: " + event.getValue().intValue() + " seconds");
+      });
+      serverGrid.addComponent(reconnectWindow);
+
+      updateServerGrid();
+
+      layout.addComponentsAndExpand(serverGrid);
+    }
+
+    // XML file generation
+    {
+      Button generateTcConfig = new Button("Generate all tc-config.xml files");
+      generateTcConfig.addStyleName("align-bottom");
+      generateTcConfig.setWidth(100, Unit.PERCENTAGE);
+      generateTcConfig.addClickListener((Button.ClickListener) event -> generateXML());
+      layout.addComponentsAndExpand(generateTcConfig);
+
+      tcConfigXml = new TextArea();
+      tcConfigXml.setWidth(100, Unit.PERCENTAGE);
+      tcConfigXml.setWordWrap(false);
+      tcConfigXml.setRows(50);
+      tcConfigXml.setStyleName("tc-config-xml");
+      layout.addComponentsAndExpand(tcConfigXml);
+    }
+
+    voltronConfigLayout.addComponentsAndExpand(layout);
+  }
+
+  private void generateXML() {
+    boolean ee = kitAwareClassLoaderDelegator.isEEKit();
+
+    List<String> configs = new ArrayList<>();
+    tcConfigXml.setValue("");
+
+    for (int stripeRow = 1; stripeRow < serverGrid.getRows(); stripeRow++) {
+
+      // starts xml
+      StringBuilder sb = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+          "\n" +
+          "<tc-config xmlns=\"http://www.terracotta.org/config\">\n" +
+          "\n" +
+          "  <plugins>\n" +
+          "\n");
+
+      // offheaps
+      if (offheapGrid.getRows() > 1) {
+        sb.append("    <config>\n" +
+            "      <offheap-resources xmlns=\"http://www.terracotta.org/config/offheap-resource\">\n");
+        for (int r = 1; r < offheapGrid.getRows(); r++) {
+          TextField name = (TextField) offheapGrid.getComponent(0, r);
+          TextField memory = (TextField) offheapGrid.getComponent(1, r);
+          sb.append("        <resource name=\"" + name.getValue() + "\" unit=\"MB\">" + memory.getValue() + "</resource>\n");
+        }
+        sb.append("      </offheap-resources>\n" +
+            "    </config>\n" +
+            "\n");
+      }
+
+      if (ee) {
+        // dataroots
+        sb.append("    <config>\n" +
+            "      <data-directories xmlns=\"http://www.terracottatech.com/config/data-roots\">\n");
+        // platform persistece
+        if (platformPersistence.getValue()) {
+          TextField path = (TextField) dataRootGrid.getComponent(DATAROOT_PATH_COLUMN, getPersistenceRow());
+          sb.append("        <directory name=\"platform\" use-for-platform=\"true\">" + path.getValue() + "</directory>\n");
+        }
+
+        // do not know why but .getComponent(x,y) does not work
+//        for (int r = getDataRootFirstRow(); r < dataRootGrid.getRows(); r++) {
+//          TextField name = (TextField) dataRootGrid.getComponent(DATAROOT_NAME_COLUMN, r);
+//          TextField path = (TextField) dataRootGrid.getComponent(DATAROOT_PATH_COLUMN, r);
+//          sb.append("        <data:directory name=\"" + name.getValue() + "\" use-for-platform=\"false\">" + path.getValue() + "</data:directory>\n");
+//        }
+
+        // workaround - iterate over all components
+        List<Component> components = new ArrayList<>();
+        dataRootGrid.iterator().forEachRemaining(components::add);
+        // remove header
+        components.remove(0);
+        components.remove(0);
+        components.remove(0);
+        if (platformBackup.getValue()) {
+          components.remove(0);
+          components.remove(0);
+        }
+        if (platformPersistence.getValue()) {
+          components.remove(0);
+          components.remove(0);
+        }
+        for (int i = 0; i < components.size(); i += 2) {
+          TextField name = (TextField) components.get(i);
+          TextField path = (TextField) components.get(i + 1);
+          sb.append("        <directory name=\"" + name.getValue() + "\" use-for-platform=\"false\">" + path.getValue() + "</directory>\n");
+        }
+
+        // end data roots    
+        sb.append("      </data-directories>\n" +
+            "    </config>\n" +
+            "\n");
+
+        // backup
+        if (platformBackup.getValue()) {
+          TextField path = (TextField) dataRootGrid.getComponent(DATAROOT_PATH_COLUMN, getBackupRow());
+          sb.append("    <service>\n" +
+              "      <backup-restore xmlns=\"http://www.terracottatech.com/config/backup-restore\">\n" +
+              "        <backup-location path=\"" + path.getValue() + "\" />\n" +
+              "      </backup-restore>\n" +
+              "    </service>\n" +
+              "\n");
+        }
+      }
+
+      // servers
+      sb.append("  </plugins>\n" +
+          "\n" +
+          "  <servers>\n" +
+          "\n");
+
+      for (int serverCol = 0; serverCol < serverGrid.getColumns(); serverCol++) {
+        FormLayout form = (FormLayout) serverGrid.getComponent(serverCol, stripeRow);
+        if (form != null) {
+          TextField name = (TextField) form.getComponent(0);
+          TextField logs = (TextField) form.getComponent(1);
+          TextField clientPort = (TextField) form.getComponent(2);
+          TextField groupPort = (TextField) form.getComponent(3);
+          sb.append("    <server host=\"localhost\" name=\"" + name.getValue() + "\">\n" +
+              "      <logs>" + logs.getValue() + "</logs>\n" +
+              "      <tsa-port>" + clientPort.getValue() + "</tsa-port>\n" +
+              "      <tsa-group-port>" + groupPort.getValue() + "</tsa-group-port>\n" +
+              "    </server>\n\n");
+        }
+      }
+
+      // reconnect window
+      sb.append("    <client-reconnect-window>" + reconnectWindow.getValue() + "</client-reconnect-window>\n\n");
+
+      // ends XML
+      sb.append("  </servers>\n\n" +
+          "</tc-config>");
+
+      String xml = sb.toString();
+
+      tcConfigXml.setValue(tcConfigXml.getValue() + xml + "\n\n");
+
+      String filename = "tc-config-stripe-" + stripeRow + ".xml";
+      configs.add(filename);
+      try {
+        Files.write(new File(kitAwareClassLoaderDelegator.getKitPath(), filename).toPath(), xml.getBytes("UTF-8"));
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
+      }
+    }
+
+    Notification.show("Configurations saved:", "Location: " + kitAwareClassLoaderDelegator.getKitPath() + "\nFile: " + configs, Notification.Type.HUMANIZED_MESSAGE);
+  }
+
+  private void updateOffHeapGrid() {
+    int nRows = offheaps.getValue().intValue() + 1;
+    // removes rows
+    for (int r = offheapGrid.getRows(); r > nRows; r--) {
+      offheapGrid.removeRow(r - 1);
+    }
+    // set new row limit
+    offheapGrid.setRows(nRows);
+    // add new rows
+    for (int r = 1; r < nRows; r++) {
+      if (offheapGrid.getComponent(0, r) == null) {
+        TextField name = new TextField("Name", "offheap-" + r);
+        TextField memory = new TextField("Size (MB)", "256");
+        offheapGrid.addComponent(name, 0, r);
+        offheapGrid.addComponent(memory, 1, r);
+      }
+    }
+  }
+
+  private void updateDataRootGrid() {
+    int header = getDataRootFirstRow();
+    int nRows = dataRoots.getValue().intValue() + header;
+    // removes rows
+    for (int r = dataRootGrid.getRows(); r > nRows; r--) {
+      dataRootGrid.removeRow(r - 1);
+    }
+    // set new row limit
+    dataRootGrid.setRows(nRows);
+    // add new rows
+    for (int r = header; r < nRows; r++) {
+      if (dataRootGrid.getComponent(0, r) == null) {
+        TextField id = new TextField("Name", "dataroot-" + (r - header + 1));
+        TextField path = new TextField("Path", "%H/terracotta/cluster/data/dataroot-" + (r - header + 1));
+        path.setWidth(100, Unit.PERCENTAGE);
+        dataRootGrid.addComponent(id, 0, r, 1, r);
+        dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, r);
+      }
+    }
+  }
+
+  private void platformBackupWanted(boolean wanted) {
+    int row = getBackupRow();
+    if (wanted) {
+      dataRootGrid.insertRow(row);
+      TextField id = new TextField("Name", "backup");
+      id.setReadOnly(true);
+      TextField path = new TextField("Path", "%H/terracotta/cluster/data/backup");
+      path.setWidth(100, Unit.PERCENTAGE);
+      dataRootGrid.addComponent(id, 0, row, 1, row);
+      dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, row);
+    } else {
+      dataRootGrid.removeRow(row);
+    }
+  }
+
+  private void platformPersistenceWanted(boolean wanted) {
+    int row = getPersistenceRow();
+    if (wanted) {
+      dataRootGrid.insertRow(row);
+      TextField id = new TextField("Name", "platform");
+      id.setReadOnly(true);
+      TextField path = new TextField("Path", "%H/terracotta/cluster/data/platform");
+      path.setWidth(100, Unit.PERCENTAGE);
+      dataRootGrid.addComponent(id, 0, row, 1, row);
+      dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, row);
+    } else {
+      dataRootGrid.removeRow(row);
+    }
+  }
+
+  private void updateServerGrid() {
+    int nRows = stripes.getValue().intValue() + 1;
+    int nCols = servers.getValue().intValue();
+    // removes rows and columns
+    for (int r = serverGrid.getRows(); r > nRows; r--) {
+      serverGrid.removeRow(r - 1);
+    }
+    for (int r = 1; r < nRows; r++) {
+      for (int c = serverGrid.getColumns(); c > nCols; c--) {
+        serverGrid.removeComponent(c - 1, r);
+      }
+    }
+    // set limits
+    serverGrid.setRows(nRows);
+    serverGrid.setColumns(Math.max(nCols, MIN_SERVER_GRID_COLS));
+    // add new rows and cols
+    for (int r = 1; r < nRows; r++) {
+      for (int c = 0; c < nCols; c++) {
+        if (serverGrid.getComponent(c, r) == null) {
+          FormLayout form = new FormLayout();
+          TextField name = new TextField("Name", "stripe-" + r + "-server-" + (c + 1));
+          TextField logs = new TextField("Logs", "%H/terracotta/cluster/logs/" + name.getValue());
+          TextField clientPort = new TextField("Client Port", "" + (9410 + (r - 1) * 10 + c));
+          TextField groupPort = new TextField("Group Port", "" + (9430 + (r - 1) * 10 + c));
+          form.addComponents(name, logs, clientPort, groupPort);
+          serverGrid.addComponent(form, c, r);
+        }
+      }
     }
   }
 
@@ -277,13 +685,8 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void setupLayout() {
-    mainLayout = new VerticalLayout();
-    mainLayout.setDefaultComponentAlignment(Alignment.MIDDLE_CENTER);
+    mainLayout = new Accordion();
     setContent(mainLayout);
-//    Label header = new Label("Welcome to the tiny pounder");
-//    header.addStyleName(ValoTheme.LABEL_H1);
-//    mainLayout.addComponent(header);
-
   }
 
   private void addCacheManagerControls() {
@@ -432,8 +835,10 @@ public class TinyPounderMainUI extends UI {
       try {
         kitAwareClassLoaderDelegator.setKitPathAndUpdate(kitPath.getValue());
         info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise" : "Open source") + " kit at : " + kitAwareClassLoaderDelegator.getKitPath());
-        initCacheLayout();
-        initDatasetLayout();
+        killAllServers();
+        initVoltronConfigLayout();
+        initVoltronControlLayout();
+        initRuntimeLayout();
       } catch (Exception e) {
         if (e instanceof NoSuchFileException) {
           displayErrorNotification("Kit path could not update !", "Make sure the path points to a kit !");
@@ -446,7 +851,7 @@ public class TinyPounderMainUI extends UI {
 
     kitControlsLayout.addComponent(info);
     kitControlsLayout.addComponent(kitPathLayout);
-    mainLayout.addComponent(kitControlsLayout);
+    mainLayout.addTab(kitControlsLayout, "STEP 1: KIT");
   }
 
   private void addDatasetManagerControls() {
@@ -541,7 +946,7 @@ public class TinyPounderMainUI extends UI {
       }
     });
     offHeapPersistenceLocationField.setCaption("offheap resource name");
-    offHeapPersistenceLocationField.setValue("primary-server-resource");
+    offHeapPersistenceLocationField.setValue("offheap-1");
 
 
     TextField diskPersistenceLocationField = new TextField();
@@ -555,7 +960,7 @@ public class TinyPounderMainUI extends UI {
       }
     });
     diskPersistenceLocationField.setCaption("disk resource name");
-    diskPersistenceLocationField.setValue("dataroot");
+    diskPersistenceLocationField.setValue("dataroot-1");
 
     CheckBox indexCheckBox = new CheckBox("use index", true);
     indexCheckBox.addStyleName("shift-bottom-right-index");
@@ -715,6 +1120,21 @@ public class TinyPounderMainUI extends UI {
   private void refreshDatasetStuff(ListDataProvider<String> listDataProvider) {
     listDataProvider.refreshAll();
     refreshDatasetManagerControls();
+  }
+
+  private int getBackupRow() {
+    return 1;
+  }
+
+  private int getPersistenceRow() {
+    return platformBackup.getValue() ? 2 : 1;
+  }
+
+  private int getDataRootFirstRow() {
+    int header = 1;
+    if (platformPersistence.getValue()) header++;
+    if (platformBackup.getValue()) header++;
+    return header;
   }
 
   // Create a dynamically updating content for the popup
