@@ -28,12 +28,17 @@
 
 .v-slot-shift-bottom-right-offheap {
     top: 35px;
-    left: 120px;
+    left: 8%;
 }
 
 .v-slot-shift-bottom-right-disk {
     top: 35px;
-    left: 140px;
+    left: 10%;
+}
+
+.v-slot-shift-bottom-right-index {
+    top: 35px;
+    left: 6%;
 }
 /*.v-widget {*/
 /*vertical-align: bottom!important;*/

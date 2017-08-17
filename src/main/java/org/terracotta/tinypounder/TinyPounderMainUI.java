@@ -558,7 +558,7 @@ public class TinyPounderMainUI extends UI {
     diskPersistenceLocationField.setValue("dataroot");
 
     CheckBox indexCheckBox = new CheckBox("use index", true);
-    indexCheckBox.addStyleName("shift-bottom-right-disk");
+    indexCheckBox.addStyleName("shift-bottom-right-index");
 
     Button addDatasetButton = new Button("Add dataset");
     addDatasetButton.addStyleName("align-bottom");
