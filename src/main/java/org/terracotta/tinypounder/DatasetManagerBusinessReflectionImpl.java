@@ -264,9 +264,12 @@ public class DatasetManagerBusinessReflectionImpl {
         Method indexMethod = datasetConfigurationBuilderClass.getMethod("index", cellDefinitionClass, indexSettingsClass);
         datasetConfigurationBuilder = indexMethod.invoke(datasetConfigurationBuilder, stringCellDefinition, btree);
       }
-
-      datasetConfigurationBuilder = offHeapMethod.invoke(datasetConfigurationBuilder, datasetConfiguration.getOffheapResourceName());
-      datasetConfigurationBuilder = diskMethod.invoke(datasetConfigurationBuilder, datasetConfiguration.getDiskResourceName());
+      if (datasetConfiguration.getOffheapResourceName() != null) {
+        datasetConfigurationBuilder = offHeapMethod.invoke(datasetConfigurationBuilder, datasetConfiguration.getOffheapResourceName());
+      }
+      if (datasetConfiguration.getDiskResourceName() != null) {
+        datasetConfigurationBuilder = diskMethod.invoke(datasetConfigurationBuilder, datasetConfiguration.getDiskResourceName());
+      }
 
       Object datasetConfigurationBuilt = buildMethod.invoke(datasetConfigurationBuilder);
 

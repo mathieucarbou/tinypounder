@@ -567,7 +567,7 @@ public class TinyPounderMainUI extends UI {
     ListDataProvider<String> listDataProvider = new ListDataProvider<>(datasetNames);
     addDatasetButton.addClickListener(clickEvent -> {
       try {
-        DatasetConfiguration datasetConfiguration = new DatasetConfiguration(offHeapPersistenceLocationField.getValue(), diskPersistenceLocationField.getValue(), indexCheckBox.getValue());
+        DatasetConfiguration datasetConfiguration = new DatasetConfiguration(offHeapCheckBox.getValue() ? offHeapPersistenceLocationField.getValue() : null, diskCheckBox.getValue() ? diskPersistenceLocationField.getValue() : null, indexCheckBox.getValue());
         datasetManagerBusiness.createDataset(datasetNameField.getValue(), datasetConfiguration);
         datasetNames.add(datasetNameField.getValue());
         refreshDatasetStuff(listDataProvider);
