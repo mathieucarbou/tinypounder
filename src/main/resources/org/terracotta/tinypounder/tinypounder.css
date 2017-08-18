@@ -54,6 +54,22 @@
     font-size: 11px !important;;
 }
 
+.valo .v-textfield-readonly {
+    background-color: lightgrey !important;
+}
+
+.valo .v-label {
+    font-weight: bold !important;
+}
+
+.v-captiontext {
+    font-weight: bold !important;
+}
+
+.v-checkbox > label {
+    font-weight: bold !important;
+}
+
 /*.v-widget {*/
 /*vertical-align: bottom!important;*/
 /*}*/
