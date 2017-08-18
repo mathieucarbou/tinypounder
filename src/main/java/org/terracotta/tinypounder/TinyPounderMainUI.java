@@ -16,6 +16,7 @@
 package org.terracotta.tinypounder;
 
 import com.vaadin.annotations.PreserveOnRefresh;
+import com.vaadin.annotations.Push;
 import com.vaadin.annotations.StyleSheet;
 import com.vaadin.annotations.Title;
 import com.vaadin.data.HasValue;
@@ -23,6 +24,7 @@ import com.vaadin.data.provider.ListDataProvider;
 import com.vaadin.server.Page;
 import com.vaadin.server.VaadinRequest;
 import com.vaadin.spring.annotation.SpringUI;
+import com.vaadin.ui.AbstractComponent;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.CheckBox;
 import com.vaadin.ui.ComboBox;
@@ -53,7 +55,16 @@ import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * The UI class
@@ -62,12 +73,14 @@ import java.util.Set;
  */
 @Title("Tiny Pounder")
 @StyleSheet("tinypounder.css")
+@Push
 @SpringUI
 @PreserveOnRefresh
 public class TinyPounderMainUI extends UI {
 
   private static final int MIN_SERVER_GRID_COLS = 3;
   private static final int DATAROOT_PATH_COLUMN = 2;
+  private static final File HOME = new File(System.getProperty("user.home"));
 
   @Autowired
   private CacheManagerBusiness cacheManagerBusiness;
@@ -77,6 +90,9 @@ public class TinyPounderMainUI extends UI {
 
   @Autowired
   private KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator;
+
+  @Autowired
+  private ScheduledExecutorService scheduledExecutorService;
 
   @Value("${licensePath}")
   private String licensePath;
@@ -105,7 +121,17 @@ public class TinyPounderMainUI extends UI {
   private CheckBox platformBackup;
   private TextArea tcConfigXml;
   private GridLayout kitPathLayout;
-  private File licenseFile;
+  private File temporaryUploadedLicenseFile;
+  private TextField clusterNameTF;
+  private Map<String, File> tcConfigLocationPerStripe = new ConcurrentHashMap<>();
+  private GridLayout serverControls;
+  private TabSheet consoles;
+  private TextArea mainConsole;
+  private Map<String, RunningServer> runningServers = new ConcurrentHashMap<>();
+  private VerticalLayout kitControlsLayout;
+  private ScheduledFuture<?> consoleRefresher;
+  private Button kitPathBT;
+  private Button generateTcConfig;
 
   @Override
   protected void init(VaadinRequest vaadinRequest) {
@@ -115,6 +141,22 @@ public class TinyPounderMainUI extends UI {
     initVoltronConfigLayout();
     initVoltronControlLayout();
     initRuntimeLayout();
+    updateServerGrid();
+
+    // refresh consoles if any
+    consoleRefresher = scheduledExecutorService.scheduleWithFixedDelay(
+        () -> access(() -> runningServers.values().forEach(RunningServer::refreshConsole)),
+        2, 2, TimeUnit.SECONDS);
+
+    addDetachListener((DetachListener) event -> {
+      runningServers.values().forEach(RunningServer::stop);
+      consoleRefresher.cancel(false);
+    });
+  }
+
+  @Override
+  public void detach() {
+    super.detach();
   }
 
   private void updateKitControls() {
@@ -127,10 +169,10 @@ public class TinyPounderMainUI extends UI {
         Upload upload = new Upload();
         upload.setReceiver((Upload.Receiver) (filename, mimeType) -> {
           File tmpDir = new File(System.getProperty("java.io.tmpdir"));
-          licenseFile = new File(tmpDir, filename);
-          licenseFile.deleteOnExit();
+          temporaryUploadedLicenseFile = new File(tmpDir, filename);
+          temporaryUploadedLicenseFile.deleteOnExit();
           try {
-            return new FileOutputStream(licenseFile);
+            return new FileOutputStream(temporaryUploadedLicenseFile);
           } catch (FileNotFoundException e) {
             throw new UncheckedIOException(e);
           }
@@ -138,7 +180,7 @@ public class TinyPounderMainUI extends UI {
         upload.setButtonCaption("Browse...");
         upload.setImmediateMode(true);
         upload.addSucceededListener((Upload.SucceededListener) event -> {
-          licensePath = licenseFile.getAbsolutePath();
+          licensePath = temporaryUploadedLicenseFile.getAbsolutePath();
           path.setValue(licensePath);
         });
         kitPathLayout.addComponent(path);
@@ -181,31 +223,203 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void initVoltronConfigLayout() {
-    if (kitAwareClassLoaderDelegator.getKitPath() != null && voltronConfigLayout == null) {
-      voltronConfigLayout = new VerticalLayout();
-      voltronConfigLayout.addStyleName("voltron-config-layout");
-      mainLayout.addTab(voltronConfigLayout, "STEP 2: SERVER CONFIGURATIONS");
+    if (kitAwareClassLoaderDelegator.getKitPath() != null) {
+      if (voltronConfigLayout == null) {
+        voltronConfigLayout = new VerticalLayout();
+        voltronConfigLayout.addStyleName("voltron-config-layout");
+        mainLayout.addTab(voltronConfigLayout, "STEP 2: SERVER CONFIGURATIONS");
+      }
       addVoltronConfigControls();
     }
   }
 
   private void initVoltronControlLayout() {
-    if (kitAwareClassLoaderDelegator.getKitPath() != null && voltronControlLayout == null) {
-      voltronControlLayout = new VerticalLayout();
-      voltronControlLayout.addStyleName("voltron-control-layout");
-      mainLayout.addTab(voltronControlLayout, "STEP 3: SERVER CONTROL");
+    if (kitAwareClassLoaderDelegator.getKitPath() != null) {
+      if (voltronControlLayout == null) {
+        voltronControlLayout = new VerticalLayout();
+        voltronControlLayout.addStyleName("voltron-control-layout");
+        mainLayout.addTab(voltronControlLayout, "STEP 3: SERVER CONTROL");
+      }
       addVoltronCommandsControls();
     }
   }
 
   private void addVoltronCommandsControls() {
-    //TODO MATHIEU : implement me
-    System.err.println(new Error("//TODO MATHIEU : implement me"));
+    serverControls = new GridLayout();
+    serverControls.setWidth(50, Unit.PERCENTAGE);
+    voltronControlLayout.addComponentsAndExpand(serverControls);
+
+    if (kitAwareClassLoaderDelegator.isEEKit()) {
+      File workDir = new File(kitAwareClassLoaderDelegator.getKitPath());
+
+      clusterNameTF = new TextField();
+      clusterNameTF.setCaption("Cluster name");
+      clusterNameTF.setValue("MyCluster");
+
+      Button clusterConfigBtn = new Button();
+      clusterConfigBtn.setCaption("Configure...");
+      clusterConfigBtn.addClickListener((Button.ClickListener) event -> {
+        if (licensePath == null) {
+          Notification.show("ERROR", "Please set a license file location!", Notification.Type.ERROR_MESSAGE);
+          return;
+        }
+        String script = new File(workDir, "tools/cluster-tool/bin/cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
+        String configs = tcConfigLocationPerStripe.values().stream().map(File::getAbsolutePath).collect(Collectors.joining(" "));
+        String command = script + " configure -n " + clusterNameTF.getValue() + " -l " + licensePath + " " + configs;
+        LinkedBlockingQueue<String> consoleLines = new LinkedBlockingQueue<>(); // no limit, get all the output
+        ProcUtils.run(
+            workDir,
+            command,
+            consoleLines,
+            newLine -> {
+            },
+            () -> access(() -> updateMainConsole(consoleLines)));
+        consoles.setSelectedTab(mainConsole);
+        updateMainConsole(consoleLines);
+      });
+
+      Button clusterBackupBtn = new Button();
+      clusterBackupBtn.setCaption("Backup...");
+      clusterBackupBtn.addClickListener((Button.ClickListener) event -> {
+        String script = new File(workDir, "tools/cluster-tool/bin/cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
+        String command = script + " backup -n " + clusterNameTF.getValue() + " localhost";
+        LinkedBlockingQueue<String> consoleLines = new LinkedBlockingQueue<>(); // no limit, get all the output
+        ProcUtils.run(
+            workDir,
+            command,
+            consoleLines,
+            newLine -> access(() -> updateMainConsole(consoleLines)),
+            () -> access(() -> consoles.setSelectedTab(mainConsole)));
+        consoles.setSelectedTab(mainConsole);
+        updateMainConsole(consoleLines);
+      });
+
+      HorizontalLayout row1 = new HorizontalLayout();
+      row1.addComponents(clusterNameTF, clusterConfigBtn, clusterBackupBtn);
+
+      voltronControlLayout.addComponentsAndExpand(row1);
+    }
+
+    consoles = new TabSheet();
+    mainConsole = addConsole("Main", "main");
+    voltronControlLayout.addComponentsAndExpand(consoles);
   }
 
-  private void killAllServers() {
-    //TODO MATHIEU : implement me
-    System.err.println(new Error("//TODO MATHIEU : implement me"));
+  private void updateMainConsole(Queue<String> consoleLines) {
+    String text = String.join("\n", consoleLines);
+    mainConsole.setValue(text);
+    mainConsole.setCursorPosition(text.length());
+  }
+
+  private TextArea addConsole(String title, String key) {
+    TextArea console = new TextArea();
+    console.setData(key);
+    console.setWidth(100, Unit.PERCENTAGE);
+    console.setWordWrap(false);
+    console.setStyleName("console");
+
+    consoles.addTab(console, title);
+
+    return console;
+  }
+
+  private void updateServerControls() {
+    int nStripes = serverGrid.getRows() - 1;
+    int nServersPerStripe = serverGrid.getColumns() - 1;
+
+    serverControls.removeAllComponents();
+    serverControls.setRows(nStripes * nServersPerStripe);
+    serverControls.setColumns(3);
+
+    for (int i = consoles.getComponentCount() - 1; i > 0; i--) {
+      consoles.removeTab(consoles.getTab(i));
+    }
+
+    for (int stripeId = 1; stripeId < serverGrid.getRows(); stripeId++) {
+      String stripeName = "stripe-" + stripeId;
+
+      for (int serverId = 1; serverId < serverGrid.getColumns(); serverId++) {
+        FormLayout form = (FormLayout) serverGrid.getComponent(serverId, stripeId);
+        if (form != null) {
+          TextField serverNameTF = (TextField) form.getComponent(0);
+          String serverName = serverNameTF.getValue();
+          serverControls.addComponent(new Label(serverName));
+
+          Button startBT = new Button();
+          startBT.setCaption("START");
+          startBT.setData(serverName);
+          serverControls.addComponent(startBT);
+
+          Button stopBT = new Button();
+          stopBT.setEnabled(false);
+          stopBT.setCaption("STOP");
+          stopBT.setData(serverName);
+          serverControls.addComponent(stopBT);
+
+          addConsole(serverName, stripeName + "-" + serverName);
+
+          startBT.addClickListener((Button.ClickListener) event -> {
+            startServer(stripeName, (String) event.getButton().getData(), startBT, stopBT);
+          });
+          stopBT.addClickListener((Button.ClickListener) event -> {
+            stopServer(stripeName, (String) event.getButton().getData(), stopBT);
+          });
+        }
+      }
+    }
+  }
+
+  private void stopServer(String stripeName, String serverName, Button stopBT) {
+    RunningServer runningServer = runningServers.get(stripeName + "-" + serverName);
+    if (runningServer != null) {
+      runningServer.stop();
+      stopBT.setEnabled(false);
+      runningServer.refreshConsole();
+    }
+  }
+
+  private void startServer(String stripeName, String serverName, Button startBT, Button stopBT) {
+    File stripeconfig = tcConfigLocationPerStripe.get(stripeName);
+    if (stripeconfig == null) {
+      generateXML();
+      stripeconfig = tcConfigLocationPerStripe.get(stripeName);
+    }
+
+    File workDir = new File(kitAwareClassLoaderDelegator.getKitPath());
+    String key = stripeName + "-" + serverName;
+    TextArea console = getConsole(key);
+
+    RunningServer runningServer = new RunningServer(workDir, stripeconfig, serverName, console, 500, () -> {
+      runningServers.remove(key);
+      access(() -> {
+        stopBT.setEnabled(false);
+        startBT.setEnabled(true);
+        voltronConfigLayout.setEnabled(runningServers.isEmpty());
+        kitPathBT.setEnabled(runningServers.isEmpty());
+      });
+    });
+
+    if (runningServers.put(key, runningServer) != null) {
+      Notification.show("ERROR", "Server is running: " + serverName, Notification.Type.ERROR_MESSAGE);
+      return;
+    }
+
+    consoles.setSelectedTab(console);
+    runningServer.start();
+    voltronConfigLayout.setEnabled(false);
+    kitPathBT.setEnabled(false);
+    startBT.setEnabled(false);
+    stopBT.setEnabled(true);
+    runningServer.refreshConsole();
+  }
+
+  private TextArea getConsole(String key) throws NoSuchElementException {
+    for (Component console : consoles) {
+      if (key.equals(((AbstractComponent) console).getData())) {
+        return (TextArea) console;
+      }
+    }
+    throw new NoSuchElementException("No console found for " + key);
   }
 
   private void addVoltronConfigControls() {
@@ -298,17 +512,19 @@ public class TinyPounderMainUI extends UI {
       });
       serverGrid.addComponent(reconnectWindow);
 
-      updateServerGrid();
-
       layout.addComponentsAndExpand(serverGrid);
     }
 
     // XML file generation
     {
-      Button generateTcConfig = new Button("Generate all tc-config.xml files");
+      generateTcConfig = new Button("Generate all tc-config.xml files");
       generateTcConfig.addStyleName("align-bottom");
       generateTcConfig.setWidth(100, Unit.PERCENTAGE);
-      generateTcConfig.addClickListener((Button.ClickListener) event -> generateXML());
+      generateTcConfig.addClickListener((Button.ClickListener) event -> {
+        generateXML();
+        List<String> filenames = tcConfigLocationPerStripe.values().stream().map(File::getName).collect(Collectors.toList());
+        Notification.show("Configurations saved:", "Location: " + kitAwareClassLoaderDelegator.getKitPath() + "\nFiles: " + filenames, Notification.Type.HUMANIZED_MESSAGE);
+      });
       layout.addComponentsAndExpand(generateTcConfig);
 
       tcConfigXml = new TextArea();
@@ -325,29 +541,43 @@ public class TinyPounderMainUI extends UI {
   private void generateXML() {
     boolean ee = kitAwareClassLoaderDelegator.isEEKit();
 
-    List<String> configs = new ArrayList<>();
+    tcConfigLocationPerStripe.clear();
     tcConfigXml.setValue("");
 
     for (int stripeRow = 1; stripeRow < serverGrid.getRows(); stripeRow++) {
 
       // starts xml
-      StringBuilder sb = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-          "\n" +
-          "<tc-config xmlns=\"http://www.terracotta.org/config\">\n" +
-          "\n" +
-          "  <plugins>\n" +
-          "\n");
+      StringBuilder sb;
+      if (ee) {
+        sb = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+            "\n" +
+            "<tc-config xmlns=\"http://www.terracotta.org/config\" \n" +
+            "           xmlns:ohr=\"http://www.terracotta.org/config/offheap-resource\"\n" +
+            "           xmlns:backup=\"http://www.terracottatech.com/config/backup-restore\"\n" +
+            "           xmlns:data=\"http://www.terracottatech.com/config/data-roots\">\n" +
+            "\n" +
+            "  <plugins>\n" +
+            "\n");
+      } else {
+        sb = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+            "\n" +
+            "<tc-config xmlns=\"http://www.terracotta.org/config\" \n" +
+            "           xmlns:ohr=\"http://www.terracotta.org/config/offheap-resource\">\n" +
+            "\n" +
+            "  <plugins>\n" +
+            "\n");
+      }
 
       // offheaps
       if (offheapGrid.getRows() > 1) {
         sb.append("    <config>\n" +
-            "      <offheap-resources xmlns=\"http://www.terracotta.org/config/offheap-resource\">\n");
+            "      <ohr:offheap-resources>\n");
         for (int r = 1; r < offheapGrid.getRows(); r++) {
           TextField name = (TextField) offheapGrid.getComponent(0, r);
           TextField memory = (TextField) offheapGrid.getComponent(1, r);
-          sb.append("        <resource name=\"" + name.getValue() + "\" unit=\"MB\">" + memory.getValue() + "</resource>\n");
+          sb.append("        <ohr:resource name=\"" + name.getValue() + "\" unit=\"MB\">" + memory.getValue() + "</ohr:resource>\n");
         }
-        sb.append("      </offheap-resources>\n" +
+        sb.append("      </ohr:offheap-resources>\n" +
             "    </config>\n" +
             "\n");
       }
@@ -355,11 +585,11 @@ public class TinyPounderMainUI extends UI {
       if (ee) {
         // dataroots
         sb.append("    <config>\n" +
-            "      <data-directories xmlns=\"http://www.terracottatech.com/config/data-roots\">\n");
+            "      <data:data-directories>\n");
         // platform persistece
         if (platformPersistence.getValue()) {
           TextField path = (TextField) dataRootGrid.getComponent(DATAROOT_PATH_COLUMN, getPersistenceRow());
-          sb.append("        <directory name=\"platform\" use-for-platform=\"true\">" + path.getValue() + "</directory>\n");
+          sb.append("        <data:directory name=\"PLATFORM\" use-for-platform=\"true\">" + path.getValue() + "</data:directory>\n");
         }
 
         // do not know why but .getComponent(x,y) does not work
@@ -387,11 +617,11 @@ public class TinyPounderMainUI extends UI {
         for (int i = 0; i < components.size(); i += 2) {
           TextField name = (TextField) components.get(i);
           TextField path = (TextField) components.get(i + 1);
-          sb.append("        <directory name=\"" + name.getValue() + "\" use-for-platform=\"false\">" + path.getValue() + "</directory>\n");
+          sb.append("        <data:directory name=\"" + name.getValue() + "\" use-for-platform=\"false\">" + path.getValue() + "</data:directory>\n");
         }
 
         // end data roots    
-        sb.append("      </data-directories>\n" +
+        sb.append("      </data:data-directories>\n" +
             "    </config>\n" +
             "\n");
 
@@ -399,9 +629,9 @@ public class TinyPounderMainUI extends UI {
         if (platformBackup.getValue()) {
           TextField path = (TextField) dataRootGrid.getComponent(DATAROOT_PATH_COLUMN, getBackupRow());
           sb.append("    <service>\n" +
-              "      <backup-restore xmlns=\"http://www.terracottatech.com/config/backup-restore\">\n" +
-              "        <backup-location path=\"" + path.getValue() + "\" />\n" +
-              "      </backup-restore>\n" +
+              "      <backup:backup-restore>\n" +
+              "        <backup:backup-location path=\"" + path.getValue() + "\" />\n" +
+              "      </backup:backup-restore>\n" +
               "    </service>\n" +
               "\n");
         }
@@ -440,15 +670,15 @@ public class TinyPounderMainUI extends UI {
       tcConfigXml.setValue(tcConfigXml.getValue() + xml + "\n\n");
 
       String filename = "tc-config-stripe-" + stripeRow + ".xml";
-      configs.add(filename);
+      File location = new File(kitAwareClassLoaderDelegator.getKitPath(), filename);
+      tcConfigLocationPerStripe.put("stripe-" + stripeRow, location);
+
       try {
-        Files.write(new File(kitAwareClassLoaderDelegator.getKitPath(), filename).toPath(), xml.getBytes("UTF-8"));
+        Files.write(location.toPath(), xml.getBytes("UTF-8"));
       } catch (IOException e) {
         throw new UncheckedIOException(e);
       }
     }
-
-    Notification.show("Configurations saved:", "Location: " + kitAwareClassLoaderDelegator.getKitPath() + "\nFile: " + configs, Notification.Type.HUMANIZED_MESSAGE);
   }
 
   private void updateOffHeapGrid() {
@@ -491,7 +721,7 @@ public class TinyPounderMainUI extends UI {
         id.setValue("dataroot-" + (r - header + 1));
         TextField path = new TextField();
         path.setPlaceholder("Location");
-        path.setValue("%H/terracotta/cluster/data/dataroot-" + (r - header + 1));
+        path.setValue(new File(HOME, "terracotta/cluster/data/dataroot-" + (r - header + 1)).getAbsolutePath());
         path.setWidth(100, Unit.PERCENTAGE);
         dataRootGrid.addComponent(id, 0, r, 1, r);
         dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, r);
@@ -505,11 +735,11 @@ public class TinyPounderMainUI extends UI {
       dataRootGrid.insertRow(row);
       TextField id = new TextField();
       id.setPlaceholder("ID");
-      id.setValue("backup");
+      id.setValue("BACKUP");
       id.setReadOnly(true);
       TextField path = new TextField();
       path.setPlaceholder("Location");
-      path.setValue("%H/terracotta/cluster/data/backup");
+      path.setValue(new File(HOME, "terracotta/cluster/data/backup").getAbsolutePath());
       path.setWidth(100, Unit.PERCENTAGE);
       dataRootGrid.addComponent(id, 0, row, 1, row);
       dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, row);
@@ -524,11 +754,11 @@ public class TinyPounderMainUI extends UI {
       dataRootGrid.insertRow(row);
       TextField id = new TextField();
       id.setPlaceholder("ID");
-      id.setValue("platform");
+      id.setValue("PLATFORM");
       id.setReadOnly(true);
       TextField path = new TextField();
       path.setPlaceholder("Location");
-      path.setValue("%H/terracotta/cluster/data/platform");
+      path.setValue(new File(HOME, "terracotta/cluster/data/platform").getAbsolutePath());
       path.setWidth(100, Unit.PERCENTAGE);
       dataRootGrid.addComponent(id, 0, row, 1, row);
       dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, row);
@@ -538,51 +768,55 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void updateServerGrid() {
-    int nRows = stripes.getValue().intValue() + 1;
-    int nCols = servers.getValue().intValue() + 1;
-    // removes rows and columns
-    for (int r = serverGrid.getRows(); r > nRows; r--) {
-      serverGrid.removeRow(r - 1);
-    }
-    for (int r = 1; r < nRows; r++) {
-      for (int c = serverGrid.getColumns(); c > nCols; c--) {
-        serverGrid.removeComponent(c - 1, r);
+    if (kitAwareClassLoaderDelegator.getKitPath() != null) {
+      int nRows = stripes.getValue().intValue() + 1;
+      int nCols = servers.getValue().intValue() + 1;
+      // removes rows and columns
+      for (int r = serverGrid.getRows(); r > nRows; r--) {
+        serverGrid.removeRow(r - 1);
       }
-    }
-    // set limits
-    serverGrid.setRows(nRows);
-    serverGrid.setColumns(Math.max(nCols, MIN_SERVER_GRID_COLS));
-    // add new rows and cols
-    for (int r = 1; r < nRows; r++) {
-      for (int c = 0; c < nCols; c++) {
-        if (serverGrid.getComponent(c, r) == null) {
-          if (c == 0) {
-            FormLayout form = new FormLayout();
-            form.addComponents(
-                new Label("Server Name"),
-                new Label("Logs location"),
-                new Label("Client port"),
-                new Label("Group port"));
-            serverGrid.addComponent(form, c, r);
-          } else {
-            FormLayout form = new FormLayout();
-            TextField name = new TextField();
-            name.setPlaceholder("Name");
-            name.setValue("stripe-" + r + "-server-" + c);
-            TextField logs = new TextField();
-            logs.setPlaceholder("Location");
-            logs.setValue("%H/terracotta/cluster/logs/" + name.getValue());
-            TextField clientPort = new TextField();
-            clientPort.setPlaceholder("Client port");
-            clientPort.setValue("" + (9410 + (r - 1) * 10 + (c - 1)));
-            TextField groupPort = new TextField();
-            groupPort.setPlaceholder("Group port");
-            groupPort.setValue("" + (9430 + (r - 1) * 10 + (c - 1)));
-            form.addComponents(name, logs, clientPort, groupPort);
-            serverGrid.addComponent(form, c, r);
+      for (int r = 1; r < nRows; r++) {
+        for (int c = serverGrid.getColumns(); c > nCols; c--) {
+          serverGrid.removeComponent(c - 1, r);
+        }
+      }
+      // set limits
+      serverGrid.setRows(nRows);
+      serverGrid.setColumns(Math.max(nCols, MIN_SERVER_GRID_COLS));
+      // add new rows and cols
+      for (int r = 1; r < nRows; r++) {
+        for (int c = 0; c < nCols; c++) {
+          if (serverGrid.getComponent(c, r) == null) {
+            if (c == 0) {
+              FormLayout form = new FormLayout();
+              form.addComponents(
+                  new Label("Server Name"),
+                  new Label("Logs location"),
+                  new Label("Client port"),
+                  new Label("Group port"));
+              serverGrid.addComponent(form, c, r);
+            } else {
+              FormLayout form = new FormLayout();
+              TextField name = new TextField();
+              name.setPlaceholder("Name");
+              name.setValue("stripe-" + r + "-server-" + c);
+              TextField logs = new TextField();
+              logs.setPlaceholder("Location");
+              logs.setValue(new File(HOME, "terracotta/cluster/logs/" + name.getValue()).getAbsolutePath());
+              TextField clientPort = new TextField();
+              clientPort.setPlaceholder("Client port");
+              clientPort.setValue("" + (9410 + (r - 1) * 10 + (c - 1)));
+              TextField groupPort = new TextField();
+              groupPort.setPlaceholder("Group port");
+              groupPort.setValue("" + (9430 + (r - 1) * 10 + (c - 1)));
+              form.addComponents(name, logs, clientPort, groupPort);
+              serverGrid.addComponent(form, c, r);
+            }
           }
         }
       }
+
+      updateServerControls();
     }
   }
 
@@ -900,7 +1134,7 @@ public class TinyPounderMainUI extends UI {
 
   private void addKitControls() {
 
-    VerticalLayout kitControlsLayout = new VerticalLayout();
+    kitControlsLayout = new VerticalLayout();
     kitPathLayout = new GridLayout(2, 1);
     kitPathLayout.setWidth(100, Unit.PERCENTAGE);
     kitPathLayout.setColumnExpandRatio(0, 2);
@@ -915,21 +1149,27 @@ public class TinyPounderMainUI extends UI {
     kitPath.setPlaceholder("Kit location");
     kitPath.setWidth("100%");
     kitPath.setValue(kitAwareClassLoaderDelegator.getKitPath() != null ? kitAwareClassLoaderDelegator.getKitPath() : "");
-    Button changePathButton = new Button("Update kit path");
-    changePathButton.setEnabled(false);
-    kitPath.addValueChangeListener(event -> changePathButton.setEnabled(true));
+    kitPathBT = new Button("Update kit path");
+    kitPathBT.setEnabled(false);
+    kitPath.addValueChangeListener(event -> kitPathBT.setEnabled(true));
     kitPathLayout.addComponent(kitPath);
-    kitPathLayout.addComponent(changePathButton);
+    kitPathLayout.addComponent(kitPathBT);
 
-    changePathButton.addClickListener(event -> {
+    kitPathBT.addClickListener(event -> {
       try {
         kitAwareClassLoaderDelegator.setKitPathAndUpdate(kitPath.getValue());
         info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise" : "Open source") + " Kit");
-        killAllServers();
+        if (voltronConfigLayout != null) {
+          voltronConfigLayout.removeAllComponents();
+        }
+        if (voltronControlLayout != null) {
+          voltronControlLayout.removeAllComponents();
+        }
         updateKitControls();
         initVoltronConfigLayout();
         initVoltronControlLayout();
         initRuntimeLayout();
+        updateServerGrid();
       } catch (Exception e) {
         if (e instanceof NoSuchFileException) {
           displayErrorNotification("Kit path could not update !", "Make sure the path points to a kit !");
