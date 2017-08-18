@@ -15,6 +15,7 @@
  */
 package org.terracotta.tinypounder;
 
+import com.vaadin.annotations.PreserveOnRefresh;
 import com.vaadin.annotations.StyleSheet;
 import com.vaadin.annotations.Title;
 import com.vaadin.data.HasValue;
@@ -37,10 +38,14 @@ import com.vaadin.ui.Slider;
 import com.vaadin.ui.TextArea;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.UI;
+import com.vaadin.ui.Upload;
 import com.vaadin.ui.VerticalLayout;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -58,6 +63,7 @@ import java.util.Set;
 @Title("Tiny Pounder")
 @StyleSheet("tinypounder.css")
 @SpringUI
+@PreserveOnRefresh
 public class TinyPounderMainUI extends UI {
 
   private static final int MIN_SERVER_GRID_COLS = 3;
@@ -71,6 +77,9 @@ public class TinyPounderMainUI extends UI {
 
   @Autowired
   private KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator;
+
+  @Value("${licensePath}")
+  private String licensePath;
 
   private Accordion mainLayout;
   private VerticalLayout cacheLayout;
@@ -95,14 +104,51 @@ public class TinyPounderMainUI extends UI {
   private CheckBox platformPersistence;
   private CheckBox platformBackup;
   private TextArea tcConfigXml;
+  private GridLayout kitPathLayout;
+  private File licenseFile;
 
   @Override
   protected void init(VaadinRequest vaadinRequest) {
     setupLayout();
     addKitControls();
+    updateKitControls();
     initVoltronConfigLayout();
     initVoltronControlLayout();
     initRuntimeLayout();
+  }
+
+  private void updateKitControls() {
+    if (kitAwareClassLoaderDelegator.isEEKit()) {
+      if (kitPathLayout.getRows() == 1) {
+        TextField path = new TextField();
+        path.setWidth(100, Unit.PERCENTAGE);
+        path.setValue(licensePath == null ? "" : licensePath);
+        path.setPlaceholder("License location");
+        Upload upload = new Upload();
+        upload.setReceiver((Upload.Receiver) (filename, mimeType) -> {
+          File tmpDir = new File(System.getProperty("java.io.tmpdir"));
+          licenseFile = new File(tmpDir, filename);
+          licenseFile.deleteOnExit();
+          try {
+            return new FileOutputStream(licenseFile);
+          } catch (FileNotFoundException e) {
+            throw new UncheckedIOException(e);
+          }
+        });
+        upload.setButtonCaption("Browse...");
+        upload.setImmediateMode(true);
+        upload.addSucceededListener((Upload.SucceededListener) event -> {
+          licensePath = licenseFile.getAbsolutePath();
+          path.setValue(licensePath);
+        });
+        kitPathLayout.addComponent(path);
+        kitPathLayout.addComponent(upload);
+      }
+    } else {
+      if (kitPathLayout.getRows() == 2) {
+        kitPathLayout.removeRow(1);
+      }
+    }
   }
 
   private void initRuntimeLayout() {
@@ -153,11 +199,13 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void addVoltronCommandsControls() {
-
+    //TODO MATHIEU : implement me
+    System.err.println(new Error("//TODO MATHIEU : implement me"));
   }
 
   private void killAllServers() {
-
+    //TODO MATHIEU : implement me
+    System.err.println(new Error("//TODO MATHIEU : implement me"));
   }
 
   private void addVoltronConfigControls() {
@@ -365,7 +413,7 @@ public class TinyPounderMainUI extends UI {
           "  <servers>\n" +
           "\n");
 
-      for (int serverCol = 0; serverCol < serverGrid.getColumns(); serverCol++) {
+      for (int serverCol = 1; serverCol < serverGrid.getColumns(); serverCol++) {
         FormLayout form = (FormLayout) serverGrid.getComponent(serverCol, stripeRow);
         if (form != null) {
           TextField name = (TextField) form.getComponent(0);
@@ -381,7 +429,7 @@ public class TinyPounderMainUI extends UI {
       }
 
       // reconnect window
-      sb.append("    <client-reconnect-window>" + reconnectWindow.getValue() + "</client-reconnect-window>\n\n");
+      sb.append("    <client-reconnect-window>" + reconnectWindow.getValue().intValue() + "</client-reconnect-window>\n\n");
 
       // ends XML
       sb.append("  </servers>\n\n" +
@@ -414,8 +462,12 @@ public class TinyPounderMainUI extends UI {
     // add new rows
     for (int r = 1; r < nRows; r++) {
       if (offheapGrid.getComponent(0, r) == null) {
-        TextField name = new TextField("Name", "offheap-" + r);
-        TextField memory = new TextField("Size (MB)", "256");
+        TextField name = new TextField();
+        name.setPlaceholder("Name");
+        name.setValue("offheap-" + r);
+        TextField memory = new TextField();
+        memory.setPlaceholder("Size (MB)");
+        memory.setValue("256");
         offheapGrid.addComponent(name, 0, r);
         offheapGrid.addComponent(memory, 1, r);
       }
@@ -434,8 +486,12 @@ public class TinyPounderMainUI extends UI {
     // add new rows
     for (int r = header; r < nRows; r++) {
       if (dataRootGrid.getComponent(0, r) == null) {
-        TextField id = new TextField("Name", "dataroot-" + (r - header + 1));
-        TextField path = new TextField("Path", "%H/terracotta/cluster/data/dataroot-" + (r - header + 1));
+        TextField id = new TextField();
+        id.setPlaceholder("ID");
+        id.setValue("dataroot-" + (r - header + 1));
+        TextField path = new TextField();
+        path.setPlaceholder("Location");
+        path.setValue("%H/terracotta/cluster/data/dataroot-" + (r - header + 1));
         path.setWidth(100, Unit.PERCENTAGE);
         dataRootGrid.addComponent(id, 0, r, 1, r);
         dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, r);
@@ -447,9 +503,13 @@ public class TinyPounderMainUI extends UI {
     int row = getBackupRow();
     if (wanted) {
       dataRootGrid.insertRow(row);
-      TextField id = new TextField("Name", "backup");
+      TextField id = new TextField();
+      id.setPlaceholder("ID");
+      id.setValue("backup");
       id.setReadOnly(true);
-      TextField path = new TextField("Path", "%H/terracotta/cluster/data/backup");
+      TextField path = new TextField();
+      path.setPlaceholder("Location");
+      path.setValue("%H/terracotta/cluster/data/backup");
       path.setWidth(100, Unit.PERCENTAGE);
       dataRootGrid.addComponent(id, 0, row, 1, row);
       dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, row);
@@ -462,9 +522,13 @@ public class TinyPounderMainUI extends UI {
     int row = getPersistenceRow();
     if (wanted) {
       dataRootGrid.insertRow(row);
-      TextField id = new TextField("Name", "platform");
+      TextField id = new TextField();
+      id.setPlaceholder("ID");
+      id.setValue("platform");
       id.setReadOnly(true);
-      TextField path = new TextField("Path", "%H/terracotta/cluster/data/platform");
+      TextField path = new TextField();
+      path.setPlaceholder("Location");
+      path.setValue("%H/terracotta/cluster/data/platform");
       path.setWidth(100, Unit.PERCENTAGE);
       dataRootGrid.addComponent(id, 0, row, 1, row);
       dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, row);
@@ -475,7 +539,7 @@ public class TinyPounderMainUI extends UI {
 
   private void updateServerGrid() {
     int nRows = stripes.getValue().intValue() + 1;
-    int nCols = servers.getValue().intValue();
+    int nCols = servers.getValue().intValue() + 1;
     // removes rows and columns
     for (int r = serverGrid.getRows(); r > nRows; r--) {
       serverGrid.removeRow(r - 1);
@@ -492,13 +556,31 @@ public class TinyPounderMainUI extends UI {
     for (int r = 1; r < nRows; r++) {
       for (int c = 0; c < nCols; c++) {
         if (serverGrid.getComponent(c, r) == null) {
-          FormLayout form = new FormLayout();
-          TextField name = new TextField("Name", "stripe-" + r + "-server-" + (c + 1));
-          TextField logs = new TextField("Logs", "%H/terracotta/cluster/logs/" + name.getValue());
-          TextField clientPort = new TextField("Client Port", "" + (9410 + (r - 1) * 10 + c));
-          TextField groupPort = new TextField("Group Port", "" + (9430 + (r - 1) * 10 + c));
-          form.addComponents(name, logs, clientPort, groupPort);
-          serverGrid.addComponent(form, c, r);
+          if (c == 0) {
+            FormLayout form = new FormLayout();
+            form.addComponents(
+                new Label("Server Name"),
+                new Label("Logs location"),
+                new Label("Client port"),
+                new Label("Group port"));
+            serverGrid.addComponent(form, c, r);
+          } else {
+            FormLayout form = new FormLayout();
+            TextField name = new TextField();
+            name.setPlaceholder("Name");
+            name.setValue("stripe-" + r + "-server-" + c);
+            TextField logs = new TextField();
+            logs.setPlaceholder("Location");
+            logs.setValue("%H/terracotta/cluster/logs/" + name.getValue());
+            TextField clientPort = new TextField();
+            clientPort.setPlaceholder("Client port");
+            clientPort.setValue("" + (9410 + (r - 1) * 10 + (c - 1)));
+            TextField groupPort = new TextField();
+            groupPort.setPlaceholder("Group port");
+            groupPort.setValue("" + (9430 + (r - 1) * 10 + (c - 1)));
+            form.addComponents(name, logs, clientPort, groupPort);
+            serverGrid.addComponent(form, c, r);
+          }
         }
       }
     }
@@ -819,10 +901,18 @@ public class TinyPounderMainUI extends UI {
   private void addKitControls() {
 
     VerticalLayout kitControlsLayout = new VerticalLayout();
-    HorizontalLayout kitPathLayout = new HorizontalLayout();
+    kitPathLayout = new GridLayout(2, 1);
+    kitPathLayout.setWidth(100, Unit.PERCENTAGE);
+    kitPathLayout.setColumnExpandRatio(0, 2);
 
-    Label info = new Label("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise" : "Open source") + " kit at : " + kitAwareClassLoaderDelegator.getKitPath());
+    Label info = new Label();
+    if (kitAwareClassLoaderDelegator.getKitPath() != null) {
+      info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise Kit" : "Open source Kit"));
+    } else {
+      info.setValue("Enter Kit location:");
+    }
     TextField kitPath = new TextField();
+    kitPath.setPlaceholder("Kit location");
     kitPath.setWidth("100%");
     kitPath.setValue(kitAwareClassLoaderDelegator.getKitPath() != null ? kitAwareClassLoaderDelegator.getKitPath() : "");
     Button changePathButton = new Button("Update kit path");
@@ -834,8 +924,9 @@ public class TinyPounderMainUI extends UI {
     changePathButton.addClickListener(event -> {
       try {
         kitAwareClassLoaderDelegator.setKitPathAndUpdate(kitPath.getValue());
-        info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise" : "Open source") + " kit at : " + kitAwareClassLoaderDelegator.getKitPath());
+        info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise" : "Open source") + " Kit");
         killAllServers();
+        updateKitControls();
         initVoltronConfigLayout();
         initVoltronControlLayout();
         initRuntimeLayout();
