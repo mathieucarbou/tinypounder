@@ -23,7 +23,6 @@ import com.vaadin.data.provider.ListDataProvider;
 import com.vaadin.server.Page;
 import com.vaadin.server.VaadinRequest;
 import com.vaadin.spring.annotation.SpringUI;
-import com.vaadin.ui.Accordion;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.CheckBox;
 import com.vaadin.ui.ComboBox;
@@ -35,6 +34,7 @@ import com.vaadin.ui.Label;
 import com.vaadin.ui.Notification;
 import com.vaadin.ui.PopupView;
 import com.vaadin.ui.Slider;
+import com.vaadin.ui.TabSheet;
 import com.vaadin.ui.TextArea;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.UI;
@@ -81,7 +81,7 @@ public class TinyPounderMainUI extends UI {
   @Value("${licensePath}")
   private String licensePath;
 
-  private Accordion mainLayout;
+  private TabSheet mainLayout;
   private VerticalLayout cacheLayout;
   private VerticalLayout datasetLayout;
 
@@ -767,7 +767,7 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void setupLayout() {
-    mainLayout = new Accordion();
+    mainLayout = new TabSheet();
     setContent(mainLayout);
   }
 
