@@ -63,7 +63,7 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
         newResourcePoolsBuilder().
             heap(1000L, MemoryUnit.KB)
             .offheap(10, MemoryUnit.MB)
-            .with(ClusteredResourcePoolBuilder.clusteredDedicated("primary-server-resource", 20, MemoryUnit.MB)))
+            .with(ClusteredResourcePoolBuilder.clusteredDedicated("offheap-1", 20, MemoryUnit.MB)))
         .build();
   }
 
@@ -131,8 +131,8 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
     CacheManagerBuilder<PersistentCacheManager> cacheManagerBuilder =
         CacheManagerBuilder.newCacheManagerBuilder()
             .with(ClusteringServiceConfigurationBuilder.cluster(clusterUri)
-                .autoCreate().defaultServerResource("primary-server-resource")
-                .resourcePool("resource-pool-a", 128, MemoryUnit.MB, "secondary-server-resource")
+                .autoCreate().defaultServerResource("offheap-1")
+                .resourcePool("resource-pool-a", 128, MemoryUnit.MB, "offheap-2")
                 .resourcePool("resource-pool-b", 64, MemoryUnit.MB)
             ).with(new CacheManagerPersistenceConfiguration(tinyPounderDiskPersistenceLocationFolder))
 //            .using(new DefaultManagementRegistryConfiguration()

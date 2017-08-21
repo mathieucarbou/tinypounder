@@ -1,3 +1,4 @@
+
 .align-bottom, v-textfield-align-bottom {
     margin-top: 24px !important;
 }
@@ -51,7 +52,18 @@
 
 .tc-config-xml {
     font-family: monospace !important;
-    font-size: 11px !important;;
+    font-size: 11px !important;
+}
+
+textarea.console {
+    font-family: monospace !important;
+    font-size: 11px !important;
+    background-color: black !important;;
+    color: white !important;
+    overflow: auto !important;;
+    height: 500px;
+    min-height: 500px !important;;
+    resize: vertical !important;
 }
 
 .valo .v-textfield-readonly {
@@ -68,6 +80,11 @@
 
 .v-checkbox > label {
     font-weight: bold !important;
+}
+
+.v-caption-on-top > .v-caption, .v-caption-on-bottom > .v-caption {
+    display: inline-block !important;
+    padding-right: 10px !important;
 }
 
 /*.v-widget {*/
