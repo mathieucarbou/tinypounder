@@ -450,7 +450,7 @@ public class TinyPounderMainUI extends UI {
       offheaps = new Slider(nOffheaps + " offheap resources", 1, 4);
       offheaps.setValue((double) nOffheaps);
       offheaps.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
-        offheaps.setCaption(event.getValue().intValue() + " stripes");
+        offheaps.setCaption(event.getValue().intValue() + " offheap resources");
         updateOffHeapGrid();
       });
       offheapGrid.addComponent(offheaps, 0, 0, 1, 0);
