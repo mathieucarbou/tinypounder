@@ -1195,6 +1195,11 @@ public class TinyPounderMainUI extends UI {
 
     kitControlsLayout.addComponent(info);
     kitControlsLayout.addComponent(kitPathLayout);
+    
+    Button exit = new Button("Close TinyPounder");
+    exit.addClickListener(event -> System.exit(0));
+    kitControlsLayout.addComponent(exit);
+    
     mainLayout.addTab(kitControlsLayout, "STEP 1: KIT");
   }
 
