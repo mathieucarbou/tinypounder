@@ -1219,7 +1219,10 @@ public class TinyPounderMainUI extends UI {
     kitControlsLayout.addComponent(kitPathLayout);
 
     Button exitBT = new Button("Close TinyPounder");
-    exitBT.addClickListener(event -> new Thread(() -> SpringApplication.exit(appContext)).start());
+    exitBT.addClickListener(event -> new Thread(() -> {
+      runningServers.values().forEach(RunningServer::stop);
+      SpringApplication.exit(appContext);
+    }).start());
     kitControlsLayout.addComponent(exitBT);
 
     mainLayout.addTab(kitControlsLayout, "STEP 1: KIT");
