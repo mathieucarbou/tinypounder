@@ -1,5 +1,6 @@
 package org.terracotta.tinypounder;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Array;
@@ -15,7 +16,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -34,10 +34,10 @@ public class DatasetManagerBusinessReflectionImpl {
   private Object datasetManager;
   private final Map<String, Map<String, Object>> datasetInstancesByDatasetName = new TreeMap<>();
   private final static String DATASET_INSTANCE_PATTERN = "^(.*)-[0-9]*$";
-  private final ScheduledExecutorService poundingScheduler = Executors.newScheduledThreadPool(1);
   private Random random = new Random();
 
-  public DatasetManagerBusinessReflectionImpl(KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator) throws Exception {
+  @Autowired
+  public DatasetManagerBusinessReflectionImpl(KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator, ScheduledExecutorService poundingScheduler) throws Exception {
     this.kitAwareClassLoaderDelegator = kitAwareClassLoaderDelegator;
     poundingScheduler.scheduleAtFixedRate(() -> poundingMap.entrySet().parallelStream().forEach(entryConsumer -> {
       try {

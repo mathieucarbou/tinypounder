@@ -48,9 +48,9 @@ public class TinypounderApplication {
     return kitAwareClassLoaderDelegator;
   }
 
-  @Bean
+  @Bean(destroyMethod = "shutdownNow")
   public ScheduledExecutorService scheduledExecutorService() {
-    return Executors.newSingleThreadScheduledExecutor(r -> {
+    return Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors(), r -> {
       Thread t = new Thread(r);
       t.setDaemon(true);
       return t;

@@ -15,6 +15,7 @@
  */
 package org.terracotta.tinypounder;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -34,7 +35,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -53,9 +53,8 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
   private Class<?> ehCacheManagerClass;
   private Random random = new Random();
 
-  private final ScheduledExecutorService poundingScheduler = Executors.newScheduledThreadPool(1);
-
-  public CacheManagerBusinessReflectionImpl(KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator) throws Exception {
+  @Autowired
+  public CacheManagerBusinessReflectionImpl(KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator, ScheduledExecutorService poundingScheduler) throws Exception {
     this.kitAwareClassLoaderDelegator = kitAwareClassLoaderDelegator;
     poundingScheduler.scheduleAtFixedRate(() -> poundingMap.entrySet().parallelStream().forEach(entryConsumer -> {
       try {
