@@ -23,7 +23,6 @@ import com.vaadin.data.HasValue;
 import com.vaadin.data.provider.ListDataProvider;
 import com.vaadin.server.Page;
 import com.vaadin.server.VaadinRequest;
-import com.vaadin.server.VaadinService;
 import com.vaadin.spring.annotation.SpringUI;
 import com.vaadin.ui.AbstractComponent;
 import com.vaadin.ui.Button;
@@ -251,52 +250,32 @@ public class TinyPounderMainUI extends UI {
     voltronControlLayout.addComponentsAndExpand(serverControls);
 
     if (kitAwareClassLoaderDelegator.isEEKit()) {
-      File workDir = new File(kitAwareClassLoaderDelegator.getKitPath());
-
       clusterNameTF = new TextField();
       clusterNameTF.setCaption("Cluster name");
       clusterNameTF.setValue("MyCluster");
 
       Button clusterConfigBtn = new Button();
-      clusterConfigBtn.setCaption("Test Configure...");
-      clusterConfigBtn.addClickListener((Button.ClickListener) event -> {
-        if (licensePath == null) {
-          Notification.show("ERROR", "Please set a license file location!", Notification.Type.ERROR_MESSAGE);
-          return;
-        }
-        String script = new File(workDir, "tools/cluster-tool/bin/cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
-        String configs = tcConfigLocationPerStripe.values().stream().map(File::getAbsolutePath).collect(Collectors.joining(" "));
-        String command = script + " configure -n " + clusterNameTF.getValue() + " -l " + licensePath + " " + configs;
-        LinkedBlockingQueue<String> consoleLines = new LinkedBlockingQueue<>(); // no limit, get all the output
-        ProcUtils.run(
-            workDir,
-            command,
-            consoleLines,
-            newLine -> {
-            },
-            () -> access(() -> updateMainConsole(consoleLines)));
-        consoles.setSelectedTab(mainConsole);
-        updateMainConsole(consoleLines);
-      });
+      clusterConfigBtn.setCaption("Configure...");
+      clusterConfigBtn.setData("configure");
+      clusterConfigBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
+
+      Button clusterReConfigBtn = new Button();
+      clusterReConfigBtn.setCaption("Reconfigure...");
+      clusterReConfigBtn.setData("reconfigure");
+      clusterReConfigBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       Button clusterBackupBtn = new Button();
-      clusterBackupBtn.setCaption("Test Backup...");
-      clusterBackupBtn.addClickListener((Button.ClickListener) event -> {
-        String script = new File(workDir, "tools/cluster-tool/bin/cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
-        String command = script + " backup -n " + clusterNameTF.getValue() + " localhost";
-        LinkedBlockingQueue<String> consoleLines = new LinkedBlockingQueue<>(); // no limit, get all the output
-        ProcUtils.run(
-            workDir,
-            command,
-            consoleLines,
-            newLine -> access(() -> updateMainConsole(consoleLines)),
-            () -> access(() -> consoles.setSelectedTab(mainConsole)));
-        consoles.setSelectedTab(mainConsole);
-        updateMainConsole(consoleLines);
-      });
+      clusterBackupBtn.setCaption("Backup...");
+      clusterBackupBtn.setData("backup");
+      clusterBackupBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
+
+      Button clusterDumpBtn = new Button();
+      clusterDumpBtn.setCaption("Dump...");
+      clusterDumpBtn.setData("dump");
+      clusterDumpBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       HorizontalLayout row1 = new HorizontalLayout();
-      row1.addComponents(clusterNameTF, clusterConfigBtn, clusterBackupBtn);
+      row1.addComponents(clusterNameTF, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn);
 
       voltronControlLayout.addComponentsAndExpand(row1);
     }
@@ -304,6 +283,48 @@ public class TinyPounderMainUI extends UI {
     consoles = new TabSheet();
     mainConsole = addConsole("Main", "main");
     voltronControlLayout.addComponentsAndExpand(consoles);
+  }
+
+  private void executeClusterToolCommand(Button.ClickEvent event) {
+    String command = (String) event.getButton().getData();
+    File workDir = new File(kitAwareClassLoaderDelegator.getKitPath());
+    LinkedBlockingQueue<String> consoleLines = new LinkedBlockingQueue<>(); // no limit, get all the output
+    String script = new File(workDir, "tools/cluster-tool/bin/cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
+    String configs = tcConfigLocationPerStripe.values().stream().map(File::getAbsolutePath).collect(Collectors.joining(" "));
+
+    switch (command) {
+
+      case "configure":
+      case "reconfigure": {
+        if (licensePath == null) {
+          Notification.show("ERROR", "Please set a license file location!", Notification.Type.ERROR_MESSAGE);
+          return;
+        }
+        ProcUtils.run(
+            workDir,
+            script + " " + command + "  -n " + clusterNameTF.getValue() + " -l " + licensePath + " " + configs,
+            consoleLines,
+            newLine -> {
+            },
+            () -> access(() -> updateMainConsole(consoleLines)));
+        break;
+      }
+
+      case "dump":
+      case "backup": {
+        ProcUtils.run(
+            workDir,
+            script + " " + command + " -n " + clusterNameTF.getValue() + " localhost",
+            consoleLines,
+            newLine -> access(() -> updateMainConsole(consoleLines)),
+            () -> access(() -> consoles.setSelectedTab(mainConsole)));
+        break;
+      }
+
+    }
+
+    consoles.setSelectedTab(mainConsole);
+    updateMainConsole(consoleLines);
   }
 
   private void updateMainConsole(Queue<String> consoleLines) {
