@@ -254,28 +254,43 @@ public class TinyPounderMainUI extends UI {
       clusterNameTF.setCaption("Cluster name");
       clusterNameTF.setValue("MyCluster");
 
+      Button clusterStartBtn = new Button();
+      clusterStartBtn.setCaption("Start all servers");
+      clusterStartBtn.addClickListener(event -> {
+        for (Component child : serverControls) {
+          if (child instanceof Button && "START".equals(child.getCaption()) && child.isEnabled()) {
+            ((Button) child).click();
+          }
+        }
+      });
+
       Button clusterConfigBtn = new Button();
-      clusterConfigBtn.setCaption("Configure...");
+      clusterConfigBtn.setCaption("Configure");
       clusterConfigBtn.setData("configure");
       clusterConfigBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       Button clusterReConfigBtn = new Button();
-      clusterReConfigBtn.setCaption("Reconfigure...");
+      clusterReConfigBtn.setCaption("Reconfigure");
       clusterReConfigBtn.setData("reconfigure");
       clusterReConfigBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       Button clusterBackupBtn = new Button();
-      clusterBackupBtn.setCaption("Backup...");
+      clusterBackupBtn.setCaption("Backup");
       clusterBackupBtn.setData("backup");
       clusterBackupBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       Button clusterDumpBtn = new Button();
-      clusterDumpBtn.setCaption("Dump...");
+      clusterDumpBtn.setCaption("Dump");
       clusterDumpBtn.setData("dump");
       clusterDumpBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
+      Button clusterStopBtn = new Button();
+      clusterStopBtn.setCaption("Stop cluster");
+      clusterStopBtn.setData("stop");
+      clusterStopBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
+
       HorizontalLayout row1 = new HorizontalLayout();
-      row1.addComponents(clusterNameTF, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn);
+      row1.addComponents(clusterNameTF, clusterStartBtn, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn);
 
       voltronControlLayout.addComponentsAndExpand(row1);
     }
@@ -291,6 +306,7 @@ public class TinyPounderMainUI extends UI {
     LinkedBlockingQueue<String> consoleLines = new LinkedBlockingQueue<>(); // no limit, get all the output
     String script = new File(workDir, "tools/cluster-tool/bin/cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
     String configs = tcConfigLocationPerStripe.values().stream().map(File::getAbsolutePath).collect(Collectors.joining(" "));
+    List<String> hostPortList = getHostPortList();
 
     switch (command) {
 
@@ -311,10 +327,11 @@ public class TinyPounderMainUI extends UI {
       }
 
       case "dump":
-      case "backup": {
+      case "backup":
+      case "stop": {
         ProcUtils.run(
             workDir,
-            script + " " + command + " -n " + clusterNameTF.getValue() + " localhost",
+            script + " " + command + " -n " + clusterNameTF.getValue() + " " + hostPortList.get(0),
             consoleLines,
             newLine -> access(() -> updateMainConsole(consoleLines)),
             () -> access(() -> consoles.setSelectedTab(mainConsole)));
@@ -395,6 +412,22 @@ public class TinyPounderMainUI extends UI {
         }
       }
     }
+  }
+
+  private List<String> getHostPortList() {
+    int nStripes = serverGrid.getRows() - 1;
+    int nServersPerStripe = serverGrid.getColumns() - 1;
+    List<String> servers = new ArrayList<>(nStripes * nServersPerStripe);
+    for (int stripeId = 1; stripeId < serverGrid.getRows(); stripeId++) {
+      for (int serverId = 1; serverId < serverGrid.getColumns(); serverId++) {
+        FormLayout form = (FormLayout) serverGrid.getComponent(serverId, stripeId);
+        if (form != null) {
+          TextField clientPortTF = (TextField) form.getComponent(2);
+          servers.add("localhost:" + clientPortTF.getValue());
+        }
+      }
+    }
+    return servers;
   }
 
   private void stopServer(String stripeName, String serverName, Button stopBT) {
