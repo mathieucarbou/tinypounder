@@ -257,7 +257,7 @@ public class TinyPounderMainUI extends UI {
       clusterNameTF.setValue("MyCluster");
 
       Button clusterConfigBtn = new Button();
-      clusterConfigBtn.setCaption("Configure...");
+      clusterConfigBtn.setCaption("Test Configure...");
       clusterConfigBtn.addClickListener((Button.ClickListener) event -> {
         if (licensePath == null) {
           Notification.show("ERROR", "Please set a license file location!", Notification.Type.ERROR_MESSAGE);
@@ -279,7 +279,7 @@ public class TinyPounderMainUI extends UI {
       });
 
       Button clusterBackupBtn = new Button();
-      clusterBackupBtn.setCaption("Backup...");
+      clusterBackupBtn.setCaption("Test Backup...");
       clusterBackupBtn.addClickListener((Button.ClickListener) event -> {
         String script = new File(workDir, "tools/cluster-tool/bin/cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
         String command = script + " backup -n " + clusterNameTF.getValue() + " localhost";
@@ -1030,8 +1030,7 @@ public class TinyPounderMainUI extends UI {
 
     TextField terracottaUrlField = new TextField();
     terracottaUrlField.setValue("localhost:9410");
-    boolean seemsAvailable = TerracottaServerBusiness.seemsAvailable(terracottaUrlField.getValue());
-    terracottaUrlField.setCaption("Terracotta host:port" + (seemsAvailable ? " OPEN" : " CLOSED"));
+    terracottaUrlField.setCaption("Terracotta host:port");
 
     terracottaUrlField.addValueChangeListener(valueChangeEvent -> {
       boolean nowSeemsAvailable = TerracottaServerBusiness.seemsAvailable(valueChangeEvent.getValue());
@@ -1199,8 +1198,7 @@ public class TinyPounderMainUI extends UI {
 
     TextField terracottaUrlField = new TextField();
     terracottaUrlField.setValue("localhost:9410");
-    boolean seemsAvailable = TerracottaServerBusiness.seemsAvailable(terracottaUrlField.getValue());
-    terracottaUrlField.setCaption("Terracotta host:port" + (seemsAvailable ? " OPEN" : " CLOSED"));
+    terracottaUrlField.setCaption("Terracotta host:port");
 
     terracottaUrlField.addValueChangeListener(valueChangeEvent -> {
       boolean nowSeemsAvailable = TerracottaServerBusiness.seemsAvailable(valueChangeEvent.getValue());
