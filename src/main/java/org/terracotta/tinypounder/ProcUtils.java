@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Queue;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
@@ -66,18 +67,26 @@ public class ProcUtils {
   static void kill(long pid) throws InterruptedException {
     if (isWindows()) {
       AnyProcess.newBuilder()
-          .command("taskkill", "/F", "/t", "/pid", String.valueOf(pid))
+          .command("taskkill", "/F", "/T", "/pid", String.valueOf(pid))
           .redirectStderr()
           .recordStdout()
           .build()
           .waitFor();
     } else {
-      AnyProcess.newBuilder()
+      boolean exited = AnyProcess.newBuilder()
           .command("kill", String.valueOf(pid))
           .redirectStderr()
           .recordStdout()
           .build()
-          .waitFor();
+          .waitFor(10, TimeUnit.SECONDS);
+      if (!exited) {
+        AnyProcess.newBuilder()
+            .command("kill", "-9", String.valueOf(pid))
+            .redirectStderr()
+            .recordStdout()
+            .build()
+            .waitFor();
+      }
     }
   }
 }

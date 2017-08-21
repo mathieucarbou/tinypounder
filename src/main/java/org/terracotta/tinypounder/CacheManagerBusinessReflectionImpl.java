@@ -327,7 +327,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       enterpriseServerSideConfigurationBuilder = defaultServerResourceMethod.invoke(enterpriseServerSideConfigurationBuilder, "offheap-1");
       enterpriseServerSideConfigurationBuilder = resourcePoolMethod4.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-a", 128L, mB, "offheap-2");
       enterpriseServerSideConfigurationBuilder = resourcePoolMethod3.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-b", 64L, mB);
-      return restartableMethod.invoke(enterpriseServerSideConfigurationBuilder, "dataroot");
+      return restartableMethod.invoke(enterpriseServerSideConfigurationBuilder, "dataroot-1");
     } else {
 
       Class<?> serverSideConfigurationBuilderClass = loadClass("org.ehcache.clustered.client.config.builders.ServerSideConfigurationBuilder");

@@ -329,7 +329,7 @@ public class TinyPounderMainUI extends UI {
 
     serverControls.removeAllComponents();
     serverControls.setRows(nStripes * nServersPerStripe);
-    serverControls.setColumns(3);
+    serverControls.setColumns(5);
 
     for (int i = consoles.getComponentCount() - 1; i > 0; i--) {
       consoles.removeTab(consoles.getTab(i));
@@ -356,10 +356,16 @@ public class TinyPounderMainUI extends UI {
           stopBT.setData(serverName);
           serverControls.addComponent(stopBT);
 
+          Label pid = new Label();
+          serverControls.addComponent(pid);
+
+          Label state = new Label();
+          serverControls.addComponent(state);
+
           addConsole(serverName, stripeName + "-" + serverName);
 
           startBT.addClickListener((Button.ClickListener) event -> {
-            startServer(stripeName, (String) event.getButton().getData(), startBT, stopBT);
+            startServer(stripeName, (String) event.getButton().getData(), startBT, stopBT, state, pid);
           });
           stopBT.addClickListener((Button.ClickListener) event -> {
             stopServer(stripeName, (String) event.getButton().getData(), stopBT);
@@ -378,7 +384,7 @@ public class TinyPounderMainUI extends UI {
     }
   }
 
-  private void startServer(String stripeName, String serverName, Button startBT, Button stopBT) {
+  private void startServer(String stripeName, String serverName, Button startBT, Button stopBT, Label stateLBL, Label pidLBL) {
     File stripeconfig = tcConfigLocationPerStripe.get(stripeName);
     if (stripeconfig == null) {
       generateXML();
@@ -389,15 +395,22 @@ public class TinyPounderMainUI extends UI {
     String key = stripeName + "-" + serverName;
     TextArea console = getConsole(key);
 
-    RunningServer runningServer = new RunningServer(workDir, stripeconfig, serverName, console, 500, () -> {
-      runningServers.remove(key);
-      access(() -> {
-        stopBT.setEnabled(false);
-        startBT.setEnabled(true);
-        voltronConfigLayout.setEnabled(runningServers.isEmpty());
-        kitPathBT.setEnabled(runningServers.isEmpty());
-      });
-    });
+    RunningServer runningServer = new RunningServer(
+        workDir, stripeconfig, serverName, console, 500,
+        () -> {
+          runningServers.remove(key);
+          access(() -> {
+            stopBT.setEnabled(false);
+            startBT.setEnabled(true);
+            voltronConfigLayout.setEnabled(runningServers.isEmpty());
+            kitPathBT.setEnabled(runningServers.isEmpty());
+            pidLBL.setValue("");
+            stateLBL.setValue("STOPPED");
+          });
+        },
+        newState -> access(() -> stateLBL.setValue("STATE: " + newState)),
+        newPID -> access(() -> pidLBL.setValue("PID: " + newPID))
+    );
 
     if (runningServers.put(key, runningServer) != null) {
       Notification.show("ERROR", "Server is running: " + serverName, Notification.Type.ERROR_MESSAGE);
@@ -405,6 +418,7 @@ public class TinyPounderMainUI extends UI {
     }
 
     consoles.setSelectedTab(console);
+    stateLBL.setValue("STARTING");
     runningServer.start();
     voltronConfigLayout.setEnabled(false);
     kitPathBT.setEnabled(false);
