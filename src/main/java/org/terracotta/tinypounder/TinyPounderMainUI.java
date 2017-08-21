@@ -23,6 +23,7 @@ import com.vaadin.data.HasValue;
 import com.vaadin.data.provider.ListDataProvider;
 import com.vaadin.server.Page;
 import com.vaadin.server.VaadinRequest;
+import com.vaadin.server.VaadinService;
 import com.vaadin.spring.annotation.SpringUI;
 import com.vaadin.ui.AbstractComponent;
 import com.vaadin.ui.Button;
@@ -44,6 +45,8 @@ import com.vaadin.ui.Upload;
 import com.vaadin.ui.VerticalLayout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringApplication;
+import org.springframework.context.ApplicationContext;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -93,6 +96,9 @@ public class TinyPounderMainUI extends UI {
 
   @Autowired
   private ScheduledExecutorService scheduledExecutorService;
+
+  @Autowired
+  private ApplicationContext appContext;
 
   @Value("${licensePath}")
   private String licensePath;
@@ -150,13 +156,8 @@ public class TinyPounderMainUI extends UI {
 
     addDetachListener((DetachListener) event -> {
       runningServers.values().forEach(RunningServer::stop);
-      consoleRefresher.cancel(false);
+      consoleRefresher.cancel(true);
     });
-  }
-
-  @Override
-  public void detach() {
-    super.detach();
   }
 
   private void updateKitControls() {
@@ -1195,11 +1196,11 @@ public class TinyPounderMainUI extends UI {
 
     kitControlsLayout.addComponent(info);
     kitControlsLayout.addComponent(kitPathLayout);
-    
-    Button exit = new Button("Close TinyPounder");
-    exit.addClickListener(event -> System.exit(0));
-    kitControlsLayout.addComponent(exit);
-    
+
+    Button exitBT = new Button("Close TinyPounder");
+    exitBT.addClickListener(event -> new Thread(() -> SpringApplication.exit(appContext)).start());
+    kitControlsLayout.addComponent(exitBT);
+
     mainLayout.addTab(kitControlsLayout, "STEP 1: KIT");
   }
 
