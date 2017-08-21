@@ -324,8 +324,8 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
 
       Object enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve(clusterTierManagerName));
       Object enterpriseServerSideConfigurationBuilder = autoCreateMethod.invoke(enterpriseClusteringServiceConfigurationBuilder);
-      enterpriseServerSideConfigurationBuilder = defaultServerResourceMethod.invoke(enterpriseServerSideConfigurationBuilder, "primary-server-resource");
-      enterpriseServerSideConfigurationBuilder = resourcePoolMethod4.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-a", 128L, mB, "secondary-server-resource");
+      enterpriseServerSideConfigurationBuilder = defaultServerResourceMethod.invoke(enterpriseServerSideConfigurationBuilder, "offheap-1");
+      enterpriseServerSideConfigurationBuilder = resourcePoolMethod4.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-a", 128L, mB, "offheap-2");
       enterpriseServerSideConfigurationBuilder = resourcePoolMethod3.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-b", 64L, mB);
       return restartableMethod.invoke(enterpriseServerSideConfigurationBuilder, "dataroot");
     } else {
@@ -342,8 +342,8 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
 
       Object enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve(clusterTierManagerName));
       Object enterpriseServerSideConfigurationBuilder = autoCreateMethod.invoke(enterpriseClusteringServiceConfigurationBuilder);
-      enterpriseServerSideConfigurationBuilder = defaultServerResourceMethod.invoke(enterpriseServerSideConfigurationBuilder, "primary-server-resource");
-      enterpriseServerSideConfigurationBuilder = resourcePoolMethod4.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-a", 128L, mB, "secondary-server-resource");
+      enterpriseServerSideConfigurationBuilder = defaultServerResourceMethod.invoke(enterpriseServerSideConfigurationBuilder, "offheap-1");
+      enterpriseServerSideConfigurationBuilder = resourcePoolMethod4.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-a", 128L, mB, "offheap-2");
       enterpriseServerSideConfigurationBuilder = resourcePoolMethod3.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-b", 64L, mB);
       return enterpriseServerSideConfigurationBuilder;
     }
@@ -401,11 +401,11 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       if (eeKit) {
         Class<?> enterpriseClusteredDedicatedResourcePoolImplClass = loadClass("com.terracottatech.ehcache.clustered.client.internal.config.EnterpriseClusteredDedicatedResourcePoolImpl");
         Constructor<?> enterpriseClusteredDedicatedResourcePoolImplConstructor = enterpriseClusteredDedicatedResourcePoolImplClass.getConstructor(String.class, long.class, memoryUnitClass);
-        clusteredDedicatedResourcePoolImpl = enterpriseClusteredDedicatedResourcePoolImplConstructor.newInstance("primary-server-resource", cacheConfiguration.getClusteredDedicatedSize(), clusteredDedicatedSizeUnit);
+        clusteredDedicatedResourcePoolImpl = enterpriseClusteredDedicatedResourcePoolImplConstructor.newInstance("offheap-1", cacheConfiguration.getClusteredDedicatedSize(), clusteredDedicatedSizeUnit);
       } else {
         Class<?> clusteredDedicatedResourcePoolImplClass = loadClass("org.ehcache.clustered.client.internal.config.DedicatedClusteredResourcePoolImpl");
         Constructor<?> enterpriseClusteredDedicatedResourcePoolImplConstructor = clusteredDedicatedResourcePoolImplClass.getConstructor(String.class, long.class, memoryUnitClass);
-        clusteredDedicatedResourcePoolImpl = enterpriseClusteredDedicatedResourcePoolImplConstructor.newInstance("primary-server-resource", cacheConfiguration.getClusteredDedicatedSize(), clusteredDedicatedSizeUnit);
+        clusteredDedicatedResourcePoolImpl = enterpriseClusteredDedicatedResourcePoolImplConstructor.newInstance("offheap-1", cacheConfiguration.getClusteredDedicatedSize(), clusteredDedicatedSizeUnit);
       }
       resourcePoolsBuilder = withMethod.invoke(resourcePoolsBuilder, clusteredDedicatedResourcePoolImpl);
     } else if (cacheConfiguration.getClusteredTierType().equals(SHARED) && cacheConfiguration.getClusteredSharedPoolName() != null) {
