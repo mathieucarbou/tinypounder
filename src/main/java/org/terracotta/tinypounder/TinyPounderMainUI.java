@@ -875,6 +875,7 @@ public class TinyPounderMainUI extends UI {
               TextField name = new TextField();
               name.setPlaceholder("Name");
               name.setValue("stripe-" + r + "-server-" + c);
+              name.addValueChangeListener(event -> updateServerControls());
               TextField logs = new TextField();
               logs.setPlaceholder("Location");
               logs.setValue(new File(HOME, "terracotta/cluster/logs/" + name.getValue()).getAbsolutePath());
