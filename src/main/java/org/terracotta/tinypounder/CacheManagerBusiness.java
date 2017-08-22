@@ -32,7 +32,7 @@ public interface CacheManagerBusiness {
 
   String retrieveHumanReadableConfiguration();
 
-  void initializeCacheManager(String terracottaServerUrl, String cmName, String tinyPounderDiskPersistenceLocation);
+  void initializeCacheManager(String terracottaServerUrl, String cmName, String tinyPounderDiskPersistenceLocation, String defaultOffheapResource, String diskResource);
 
   boolean isCacheManagerAlive();
 

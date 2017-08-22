@@ -115,7 +115,7 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
   }
 
   @Override
-  public void initializeCacheManager(String terracottaServerUrl, String cmName, String tinyPounderDiskPersistenceLocation) {
+  public void initializeCacheManager(String terracottaServerUrl, String cmName, String tinyPounderDiskPersistenceLocation, String defaultOffheapResource, String diskResource) {
     URI clusterUri = URI.create("terracotta://" + terracottaServerUrl + "/" + cmName);
 
 

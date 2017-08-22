@@ -83,7 +83,7 @@ textarea.console {
 }
 
 .v-caption-on-top > .v-caption, .v-caption-on-bottom > .v-caption {
-    display: inline-block !important;
+    /*display: inline-block !important;*/
     padding-right: 10px !important;
 }
 

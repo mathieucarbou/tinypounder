@@ -256,6 +256,7 @@ public class TinyPounderMainUI extends UI {
 
       Button clusterStartBtn = new Button();
       clusterStartBtn.setCaption("Start all servers");
+      clusterStartBtn.addStyleName("align-bottom");
       clusterStartBtn.addClickListener(event -> {
         for (Component child : serverControls) {
           if (child instanceof Button && "START".equals(child.getCaption()) && child.isEnabled()) {
@@ -265,26 +266,31 @@ public class TinyPounderMainUI extends UI {
       });
 
       Button clusterConfigBtn = new Button();
+      clusterConfigBtn.addStyleName("align-bottom");
       clusterConfigBtn.setCaption("Configure");
       clusterConfigBtn.setData("configure");
       clusterConfigBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       Button clusterReConfigBtn = new Button();
+      clusterReConfigBtn.addStyleName("align-bottom");
       clusterReConfigBtn.setCaption("Reconfigure");
       clusterReConfigBtn.setData("reconfigure");
       clusterReConfigBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       Button clusterBackupBtn = new Button();
+      clusterBackupBtn.addStyleName("align-bottom");
       clusterBackupBtn.setCaption("Backup");
       clusterBackupBtn.setData("backup");
       clusterBackupBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       Button clusterDumpBtn = new Button();
+      clusterDumpBtn.addStyleName("align-bottom");
       clusterDumpBtn.setCaption("Dump");
       clusterDumpBtn.setData("dump");
       clusterDumpBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       Button clusterStopBtn = new Button();
+      clusterStopBtn.addStyleName("align-bottom");
       clusterStopBtn.setCaption("Stop cluster");
       clusterStopBtn.setData("stop");
       clusterStopBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
@@ -904,7 +910,6 @@ public class TinyPounderMainUI extends UI {
 
     List<Long> onHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> onHeapSizeComboBox = new ComboBox<>("OnHeap size", onHeapValues);
-    onHeapSizeComboBox.addStyleName("small-combo");
     onHeapSizeComboBox.setEmptySelectionAllowed(false);
     onHeapSizeComboBox.setValue(onHeapValues.get(3));
     cacheCreation.addComponent(onHeapSizeComboBox);
@@ -916,28 +921,24 @@ public class TinyPounderMainUI extends UI {
 
     List<Long> offHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> offHeapSizeComboBox = new ComboBox<>("Offheap size", offHeapValues);
-    offHeapSizeComboBox.addStyleName("small-combo");
     offHeapSizeComboBox.setEmptySelectionAllowed(false);
     offHeapSizeComboBox.setValue(offHeapValues.get(1));
     cacheCreation.addComponent(offHeapSizeComboBox);
 
     List<String> offHeapUnitValues = Arrays.asList("KB", "MB", "GB");
     ComboBox<String> offHeapUnitComboBox = new ComboBox<>("OffHeap unit", offHeapUnitValues);
-    offHeapUnitComboBox.addStyleName("small-combo");
     offHeapUnitComboBox.setValue(offHeapUnitValues.get(1));
     cacheCreation.addComponent(offHeapUnitComboBox);
 
 
     List<Long> diskValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> diskSizeComboBox = new ComboBox<>("Disk size", diskValues);
-    diskSizeComboBox.addStyleName("small-combo");
     diskSizeComboBox.setEmptySelectionAllowed(false);
     diskSizeComboBox.setValue(diskValues.get(0));
     cacheCreation.addComponent(diskSizeComboBox);
 
     List<String> diskUnitValues = Arrays.asList("KB", "MB", "GB");
     ComboBox<String> diskUnitComboBox = new ComboBox<>("Disk unit", diskUnitValues);
-    diskUnitComboBox.addStyleName("small-combo");
     diskUnitComboBox.setValue(diskUnitValues.get(1));
     cacheCreation.addComponent(diskUnitComboBox);
 
@@ -1110,15 +1111,35 @@ public class TinyPounderMainUI extends UI {
     clusterTierManagerNameField.setCaption("ClusterTierManager name");
     clusterTierManagerNameField.setValue("TinyPounderCM");
 
+    TextField offHeapPersistenceLocationField = new TextField();
+    CheckBox offHeapCheckBox = new CheckBox("offheap", true);
+    offHeapCheckBox.addStyleName("shift-bottom-right-offheap");
+    offHeapCheckBox.setEnabled(false);
+    offHeapPersistenceLocationField.setCaption("offheap resource name");
+    offHeapPersistenceLocationField.setValue("offheap-1");
+
+
+    TextField serverDiskPersistenceLocationField = new TextField();
+    CheckBox serverDiskCheckBox = new CheckBox("disk", true);
+    serverDiskCheckBox.addStyleName("shift-bottom-right-disk");
+    serverDiskCheckBox.setEnabled(false);
+    serverDiskPersistenceLocationField.setCaption("disk resource name");
+    serverDiskPersistenceLocationField.setValue("dataroot-1");
+
+
     CheckBox clusteredCheckBox = new CheckBox("Clustered", true);
     clusteredCheckBox.addStyleName("align-bottom");
     clusteredCheckBox.addValueChangeListener(valueChangeEvent -> {
       if (valueChangeEvent.getValue()) {
         terracottaUrlField.setEnabled(true);
         clusterTierManagerNameField.setEnabled(true);
+        offHeapPersistenceLocationField.setEnabled(true);
+        serverDiskPersistenceLocationField.setEnabled(true);
       } else {
         terracottaUrlField.setEnabled(false);
         clusterTierManagerNameField.setEnabled(false);
+        offHeapPersistenceLocationField.setEnabled(false);
+        serverDiskPersistenceLocationField.setEnabled(false);
       }
     });
 
@@ -1142,7 +1163,7 @@ public class TinyPounderMainUI extends UI {
 
     createCacheManagerButton.addClickListener(event -> {
       try {
-        cacheManagerBusiness.initializeCacheManager(!clusteredCheckBox.getValue() ? null : terracottaUrlField.getValue(), clusterTierManagerNameField.getValue(), !diskCheckBox.getValue() ? null : diskPersistenceLocationField.getValue());
+        cacheManagerBusiness.initializeCacheManager(!clusteredCheckBox.getValue() ? null : terracottaUrlField.getValue(), clusterTierManagerNameField.getValue(), !diskCheckBox.getValue() ? null : diskPersistenceLocationField.getValue(), offHeapPersistenceLocationField.getValue(), serverDiskPersistenceLocationField.getValue());
         cacheManagerConfigTextArea.setValue(cacheManagerBusiness.retrieveHumanReadableConfiguration());
         refreshCacheManagerControls();
       } catch (Exception e) {
@@ -1186,7 +1207,11 @@ public class TinyPounderMainUI extends UI {
     }
 
     currentCacheManagerControls.addComponentsAndExpand(statusLabel, popupView, closeCacheManager, destroyCacheManager);
-    createCacheManagerClusteredControls.addComponentsAndExpand(clusteredCheckBox, terracottaUrlField, clusterTierManagerNameField, createCacheManagerButton);
+    createCacheManagerClusteredControls.addComponentsAndExpand(clusteredCheckBox, terracottaUrlField, clusterTierManagerNameField, offHeapCheckBox, offHeapPersistenceLocationField);
+    if (kitAwareClassLoaderDelegator.isEEKit()) {
+      createCacheManagerClusteredControls.addComponentsAndExpand(serverDiskCheckBox, serverDiskPersistenceLocationField);
+    }
+    createCacheManagerClusteredControls.addComponentsAndExpand(createCacheManagerButton);
     createCacheManagerDiskControls.addComponentsAndExpand(diskCheckBox, diskPersistenceLocationField);
     createCacheManagerInitializeControls.addComponentsAndExpand(createCacheManagerButton);
     cacheManagerControls.addComponentsAndExpand(currentCacheManagerControls);
