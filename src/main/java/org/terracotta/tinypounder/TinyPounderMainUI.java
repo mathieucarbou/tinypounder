@@ -43,7 +43,6 @@ import com.vaadin.ui.UI;
 import com.vaadin.ui.Upload;
 import com.vaadin.ui.VerticalLayout;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
 
@@ -99,8 +98,8 @@ public class TinyPounderMainUI extends UI {
   @Autowired
   private ApplicationContext appContext;
 
-  @Value("${licensePath}")
-  private String licensePath;
+  @Autowired
+  private Settings settings;
 
   private TabSheet mainLayout;
   private VerticalLayout cacheLayout;
@@ -159,7 +158,8 @@ public class TinyPounderMainUI extends UI {
       if (kitPathLayout.getRows() == 1) {
         TextField path = new TextField();
         path.setWidth(100, Unit.PERCENTAGE);
-        path.setValue(licensePath == null ? "" : licensePath);
+        path.setValue(settings.getLicensePath() == null ? "" : settings.getLicensePath());
+        path.addValueChangeListener(event -> settings.setLicensePath(event.getValue()));
         path.setPlaceholder("License location");
         Upload upload = new Upload();
         upload.setReceiver((Upload.Receiver) (filename, mimeType) -> {
@@ -175,8 +175,8 @@ public class TinyPounderMainUI extends UI {
         upload.setButtonCaption("Browse...");
         upload.setImmediateMode(true);
         upload.addSucceededListener((Upload.SucceededListener) event -> {
-          licensePath = temporaryUploadedLicenseFile.getAbsolutePath();
-          path.setValue(licensePath);
+          settings.setLicensePath(temporaryUploadedLicenseFile.getAbsolutePath());
+          path.setValue(settings.getLicensePath());
         });
         kitPathLayout.addComponent(path);
         kitPathLayout.addComponent(upload);
@@ -218,7 +218,7 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void initVoltronConfigLayout() {
-    if (kitAwareClassLoaderDelegator.getKitPath() != null) {
+    if (settings.getKitPath() != null) {
       if (voltronConfigLayout == null) {
         voltronConfigLayout = new VerticalLayout();
         voltronConfigLayout.addStyleName("voltron-config-layout");
@@ -229,7 +229,7 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void initVoltronControlLayout() {
-    if (kitAwareClassLoaderDelegator.getKitPath() != null) {
+    if (settings.getKitPath() != null) {
       if (voltronControlLayout == null) {
         voltronControlLayout = new VerticalLayout();
         voltronControlLayout.addStyleName("voltron-control-layout");
@@ -303,7 +303,7 @@ public class TinyPounderMainUI extends UI {
 
   private void executeClusterToolCommand(Button.ClickEvent event) {
     String command = (String) event.getButton().getData();
-    File workDir = new File(kitAwareClassLoaderDelegator.getKitPath());
+    File workDir = new File(settings.getKitPath());
     LinkedBlockingQueue<String> consoleLines = new LinkedBlockingQueue<>(); // no limit, get all the output
     String script = new File(workDir, "tools/cluster-tool/bin/cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
     String configs = tcConfigLocationPerStripe.values().stream().map(File::getAbsolutePath).collect(Collectors.joining(" "));
@@ -313,17 +313,20 @@ public class TinyPounderMainUI extends UI {
 
       case "configure":
       case "reconfigure": {
-        if (licensePath == null) {
+        if (settings.getLicensePath() == null) {
           Notification.show("ERROR", "Please set a license file location!", Notification.Type.ERROR_MESSAGE);
           return;
         }
         ProcUtils.run(
             workDir,
-            script + " " + command + "  -n " + clusterNameTF.getValue() + " -l " + licensePath + " " + configs,
+            script + " " + command + "  -n " + clusterNameTF.getValue() + " -l " + settings.getLicensePath() + " " + configs,
             consoleLines,
             newLine -> {
             },
-            () -> access(() -> updateMainConsole(consoleLines)));
+            () -> access(() -> {
+              updateMainConsole(consoleLines);
+              consoles.setSelectedTab(mainConsole);
+            }));
         break;
       }
 
@@ -346,7 +349,7 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void updateMainConsole(Queue<String> consoleLines) {
-    String text = String.join("\n", consoleLines);
+    String text = String.join("", consoleLines);
     mainConsole.setValue(text);
     mainConsole.setCursorPosition(text.length());
   }
@@ -447,7 +450,7 @@ public class TinyPounderMainUI extends UI {
       stripeconfig = tcConfigLocationPerStripe.get(stripeName);
     }
 
-    File workDir = new File(kitAwareClassLoaderDelegator.getKitPath());
+    File workDir = new File(settings.getKitPath());
     String key = stripeName + "-" + serverName;
     TextArea console = getConsole(key);
 
@@ -498,7 +501,7 @@ public class TinyPounderMainUI extends UI {
 
     // offheap resources
     {
-      int nOffheaps = 2;
+      int nOffheaps = settings.getOffheapCount();
 
       offheapGrid = new GridLayout(2, nOffheaps + 1);
 
@@ -506,6 +509,7 @@ public class TinyPounderMainUI extends UI {
       offheaps.setValue((double) nOffheaps);
       offheaps.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
         offheaps.setCaption(event.getValue().intValue() + " offheap resources");
+        settings.setOffheapCount(event.getValue().intValue());
         updateOffHeapGrid();
       });
       offheapGrid.addComponent(offheaps, 0, 0, 1, 0);
@@ -517,7 +521,7 @@ public class TinyPounderMainUI extends UI {
 
     // ee stuff
     if (ee) {
-      int nData = 2;
+      int nData = settings.getDataRootCount();
 
       dataRootGrid = new GridLayout(3, nData + 1);
       dataRootGrid.setWidth(100, Unit.PERCENTAGE);
@@ -528,6 +532,7 @@ public class TinyPounderMainUI extends UI {
       dataRoots.setValue((double) nData);
       dataRoots.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
         dataRoots.setCaption(event.getValue().intValue() + " data roots");
+        settings.setDataRootCount(event.getValue().intValue());
         updateDataRootGrid();
       });
       dataRootGrid.addComponent(dataRoots);
@@ -551,9 +556,9 @@ public class TinyPounderMainUI extends UI {
 
     // stripe / server form
     {
-      int nStripes = ee ? 2 : 1;
-      int nServers = 2;
-      int nReconWin = 120;
+      int nStripes = ee ? settings.getStripeCount() : 1;
+      int nServers = settings.getServerCount();
+      int nReconWin = settings.getReconnectWindow();
 
       serverGrid = new GridLayout(MIN_SERVER_GRID_COLS, nStripes + 1);
       serverGrid.setWidth(100, Unit.PERCENTAGE);
@@ -562,6 +567,7 @@ public class TinyPounderMainUI extends UI {
       stripes.setValue((double) nStripes);
       stripes.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
         stripes.setCaption(event.getValue().intValue() + " stripes");
+        settings.setStripeCount(event.getValue().intValue());
         updateServerGrid();
       });
       stripes.setReadOnly(!ee);
@@ -571,6 +577,7 @@ public class TinyPounderMainUI extends UI {
       servers.setValue((double) nServers);
       servers.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
         servers.setCaption(event.getValue().intValue() + " servers per stripe");
+        settings.setServerCount(event.getValue().intValue());
         updateServerGrid();
       });
       serverGrid.addComponent(servers);
@@ -579,6 +586,7 @@ public class TinyPounderMainUI extends UI {
       reconnectWindow.setValue((double) nReconWin);
       reconnectWindow.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
         reconnectWindow.setCaption("Reconnect window: " + event.getValue().intValue() + " seconds");
+        settings.setReconnectWindow(event.getValue().intValue());
       });
       serverGrid.addComponent(reconnectWindow);
 
@@ -593,7 +601,7 @@ public class TinyPounderMainUI extends UI {
       generateTcConfig.addClickListener((Button.ClickListener) event -> {
         generateXML();
         List<String> filenames = tcConfigLocationPerStripe.values().stream().map(File::getName).collect(Collectors.toList());
-        Notification.show("Configurations saved:", "Location: " + kitAwareClassLoaderDelegator.getKitPath() + "\nFiles: " + filenames, Notification.Type.HUMANIZED_MESSAGE);
+        Notification.show("Configurations saved:", "Location: " + settings.getKitPath() + "\nFiles: " + filenames, Notification.Type.HUMANIZED_MESSAGE);
       });
       layout.addComponentsAndExpand(generateTcConfig);
 
@@ -740,7 +748,7 @@ public class TinyPounderMainUI extends UI {
       tcConfigXml.setValue(tcConfigXml.getValue() + xml + "\n\n");
 
       String filename = "tc-config-stripe-" + stripeRow + ".xml";
-      File location = new File(kitAwareClassLoaderDelegator.getKitPath(), filename);
+      File location = new File(settings.getKitPath(), filename);
       tcConfigLocationPerStripe.put("stripe-" + stripeRow, location);
 
       try {
@@ -838,7 +846,7 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void updateServerGrid() {
-    if (kitAwareClassLoaderDelegator.getKitPath() != null) {
+    if (settings.getKitPath() != null) {
       int nRows = stripes.getValue().intValue() + 1;
       int nCols = servers.getValue().intValue() + 1;
       // removes rows and columns
@@ -1232,7 +1240,7 @@ public class TinyPounderMainUI extends UI {
     kitPathLayout.setColumnExpandRatio(0, 2);
 
     Label info = new Label();
-    if (kitAwareClassLoaderDelegator.getKitPath() != null) {
+    if (settings.getKitPath() != null) {
       info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise Kit" : "Open source Kit"));
     } else {
       info.setValue("Enter Kit location:");
@@ -1240,7 +1248,7 @@ public class TinyPounderMainUI extends UI {
     TextField kitPath = new TextField();
     kitPath.setPlaceholder("Kit location");
     kitPath.setWidth("100%");
-    kitPath.setValue(kitAwareClassLoaderDelegator.getKitPath() != null ? kitAwareClassLoaderDelegator.getKitPath() : "");
+    kitPath.setValue(settings.getKitPath() != null ? settings.getKitPath() : "");
     kitPathBT = new Button("Update kit path");
     kitPathBT.setEnabled(false);
     kitPath.addValueChangeListener(event -> kitPathBT.setEnabled(true));
@@ -1249,7 +1257,7 @@ public class TinyPounderMainUI extends UI {
 
     kitPathBT.addClickListener(event -> {
       try {
-        kitAwareClassLoaderDelegator.setKitPathAndUpdate(kitPath.getValue());
+        kitAwareClassLoaderDelegator.setKitPath(kitPath.getValue());
         info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise" : "Open source") + " Kit");
         if (voltronConfigLayout != null) {
           voltronConfigLayout.removeAllComponents();
