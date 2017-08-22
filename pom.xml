@@ -101,6 +101,12 @@
             <organization>Terracotta Inc., a wholly-owned subsidiary of Software AG USA, Inc.</organization>
             <organizationUrl>https://terracotta.org</organizationUrl>
         </developer>
+        <developer>
+            <name>Mathieu Carbou</name>
+            <email>mathieu.carbou@softwareag.com</email>
+            <organization>Terracotta Inc., a wholly-owned subsidiary of Software AG USA, Inc.</organization>
+            <organizationUrl>https://terracotta.org</organizationUrl>
+        </developer>
     </developers>
 
     <licenses>
