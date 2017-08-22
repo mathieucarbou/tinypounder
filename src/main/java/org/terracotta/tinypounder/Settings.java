@@ -57,16 +57,20 @@ public class Settings {
     // always prefer system props over saved config
     if (kitPath == null || kitPath.isEmpty()) {
       kitPath = properties.getProperty("kitPath");
-      File folder = new File(kitPath);
-      if (!folder.exists() || !folder.isDirectory()) {
-        kitPath = null;
+      if(kitPath != null) {
+        File folder = new File(kitPath);
+        if (!folder.exists() || !folder.isDirectory()) {
+          kitPath = null;
+        } 
       }
     }
     if (licensePath == null || licensePath.isEmpty()) {
       licensePath = properties.getProperty("licensePath");
-      File file = new File(licensePath);
-      if (!file.exists() || !file.isFile()) {
-        licensePath = null;
+      if(licensePath != null) {
+        File file = new File(licensePath);
+        if (!file.exists() || !file.isFile()) {
+          licensePath = null;
+        }  
       }
     }
     if (offheapCount < 1) {

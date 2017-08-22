@@ -41,8 +41,12 @@ public class KitAwareClassLoaderDelegator {
   public void init() {
     String kitPath = settings.getKitPath();
     if (kitPath != null) {
-      URL[] urls = discoverKitClientJars(kitPath);
-      urlClassLoader = URLClassLoader.newInstance(urls, Thread.currentThread().getContextClassLoader());
+      try {
+        URL[] urls = discoverKitClientJars(kitPath);
+        urlClassLoader = URLClassLoader.newInstance(urls, Thread.currentThread().getContextClassLoader());
+      } catch (Exception e) {
+        settings.setKitPath(null); // clear the kit path so that at next startup it is not called with an invalid one
+      }
     }
   }
 
@@ -50,7 +54,7 @@ public class KitAwareClassLoaderDelegator {
     return urlClassLoader;
   }
 
-  private static URL[] discoverKitClientJars(String kitPath) {
+  private static URL[] discoverKitClientJars(String kitPath) throws Exception {
     Stream<Path> clientEhcacheJarStream = null;
     try {
       clientEhcacheJarStream = Files.walk(Paths.get(kitPath, "/client/ehcache"), 4, FileVisitOption.FOLLOW_LINKS)
@@ -71,11 +75,8 @@ public class KitAwareClassLoaderDelegator {
           .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
     } catch (IOException e) {
       // it's possible that the client libs are elsewhere...
-      try {
-        clientLibJarStream = Files.walk(Paths.get(kitPath, "../common/lib"), 4, FileVisitOption.FOLLOW_LINKS)
-            .filter(path -> path.toFile().getAbsolutePath().endsWith("-client.jar"));
-      } catch (IOException ignored) {
-      }
+      clientLibJarStream = Files.walk(Paths.get(kitPath, "../common/lib"), 4, FileVisitOption.FOLLOW_LINKS)
+          .filter(path -> path.toFile().getAbsolutePath().endsWith("-client.jar"));
     }
     Stream<Path> concat = clientEhcacheJarStream != null ? Stream.concat(clientEhcacheJarStream, clientLibJarStream) : clientLibJarStream;
     concat = clientStoreJarStream != null ? Stream.concat(concat, clientStoreJarStream) : concat;
@@ -118,6 +119,13 @@ public class KitAwareClassLoaderDelegator {
 
   public void setKitPath(String kitPath) {
     settings.setKitPath(kitPath);
-    init();
+    if (kitPath != null && !kitPath.isEmpty()) {
+      try {
+        URL[] urls = discoverKitClientJars(kitPath);
+        urlClassLoader = URLClassLoader.newInstance(urls, Thread.currentThread().getContextClassLoader());
+      } catch (Exception e) {
+        throw new RuntimeException("Please make sure the kitPath is properly set, current value is : " + kitPath, e);
+      }
+    }
   }
 }
