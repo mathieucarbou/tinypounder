@@ -38,6 +38,8 @@ public class DatasetManagerBusinessReflectionImpl {
   private Random random = new Random();
   private Object stringCellDefinition;
   private Class<?> cellDefinitionClass;
+  private Object typeString;
+  private Class<?> typeClass;
 
   @Autowired
   public DatasetManagerBusinessReflectionImpl(KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator, ScheduledExecutorService poundingScheduler) throws Exception {
@@ -310,6 +312,7 @@ public class DatasetManagerBusinessReflectionImpl {
   public void initializeDatasetManager(String terracottaServerUrl) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
+      initCommonObjectsAndClasses();
       if (terracottaServerUrl != null) {
         URI clusterUri = URI.create("terracotta://" + terracottaServerUrl);
 
@@ -327,6 +330,16 @@ public class DatasetManagerBusinessReflectionImpl {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
+  }
+
+  private void initCommonObjectsAndClasses() throws Exception {
+    typeClass = loadClass("com.terracottatech.store.Type");
+    Field typeStringField = typeClass.getDeclaredField("STRING");
+    typeString = typeStringField.get(null);
+
+    cellDefinitionClass = loadClass("com.terracottatech.store.definition.CellDefinition");
+    Method defineStringMethod = cellDefinitionClass.getMethod("defineString", String.class);
+    stringCellDefinition = defineStringMethod.invoke(null, "myStringCell");
   }
 
   public void close() {
@@ -362,9 +375,6 @@ public class DatasetManagerBusinessReflectionImpl {
   public void createDataset(String datasetName, DatasetConfiguration datasetConfiguration) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
-      Class<?> typeClass = loadClass("com.terracottatech.store.Type");
-      Field typeLongField = typeClass.getDeclaredField("STRING");
-      Object typeLong = typeLongField.get(null);
       Class<?> indexSettingsClass = loadClass("com.terracottatech.store.indexing.IndexSettings");
       Field btreeField = indexSettingsClass.getDeclaredField("BTREE");
       Object btree = btreeField.get(null);
@@ -378,10 +388,6 @@ public class DatasetManagerBusinessReflectionImpl {
       Method offHeapMethod = datasetConfigurationBuilderClass.getMethod("offheap", String.class);
       Method diskMethod = datasetConfigurationBuilderClass.getMethod("disk", String.class);
       Method buildMethod = datasetConfigurationBuilderClass.getMethod("build");
-
-      cellDefinitionClass = loadClass("com.terracottatech.store.definition.CellDefinition");
-      Method defineStringMethod = cellDefinitionClass.getMethod("defineString", String.class);
-      stringCellDefinition = defineStringMethod.invoke(null, "myStringCell");
 
       if (datasetConfiguration.useIndex()) {
         Method indexMethod = datasetConfigurationBuilderClass.getMethod("index", cellDefinitionClass, indexSettingsClass);
@@ -397,7 +403,7 @@ public class DatasetManagerBusinessReflectionImpl {
       Object datasetConfigurationBuilt = buildMethod.invoke(datasetConfigurationBuilder);
 
       Method createDatasetMethod = datasetManagerClass.getMethod("createDataset", String.class, typeClass, datasetConfigurationClass);
-      Object datasetInstance = createDatasetMethod.invoke(datasetManager, datasetName, typeLong, datasetConfigurationBuilt);
+      Object datasetInstance = createDatasetMethod.invoke(datasetManager, datasetName, typeString, datasetConfigurationBuilt);
 
       String instanceName = getInstanceName(datasetInstance);
       Map<String, Object> instancesByName = new TreeMap<>();
@@ -473,12 +479,8 @@ public class DatasetManagerBusinessReflectionImpl {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
 
-      Class<?> typeClass = loadClass("com.terracottatech.store.Type");
-      Field typeLongField = typeClass.getDeclaredField("LONG");
-      Object typeLong = typeLongField.get(null);
-
       Method getDatasetMethod = datasetManagerClass.getMethod("getDataset", String.class, typeClass);
-      Object datasetInstance = getDatasetMethod.invoke(datasetManager, datasetName, typeLong);
+      Object datasetInstance = getDatasetMethod.invoke(datasetManager, datasetName, typeString);
       String instanceName = getInstanceName(datasetInstance);
 
       datasetInstancesByDatasetName.computeIfAbsent(datasetName, k -> new TreeMap<>());
