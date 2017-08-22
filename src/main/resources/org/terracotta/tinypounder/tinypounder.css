@@ -11,6 +11,10 @@
     padding-bottom: 5px !important;
 }
 
+.valo .v-margin-left {
+    padding-left: 10px !important;
+}
+
 .small-combo {
     width: 90px !important;
 }

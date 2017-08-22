@@ -906,6 +906,7 @@ public class TinyPounderMainUI extends UI {
 
     List<Long> onHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> onHeapSizeComboBox = new ComboBox<>("OnHeap size", onHeapValues);
+    onHeapSizeComboBox.addStyleName("small-combo");
     onHeapSizeComboBox.setEmptySelectionAllowed(false);
     onHeapSizeComboBox.setValue(onHeapValues.get(3));
     cacheCreation.addComponent(onHeapSizeComboBox);
@@ -917,24 +918,27 @@ public class TinyPounderMainUI extends UI {
 
     List<Long> offHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> offHeapSizeComboBox = new ComboBox<>("Offheap size", offHeapValues);
+    offHeapSizeComboBox.addStyleName("small-combo");
     offHeapSizeComboBox.setEmptySelectionAllowed(false);
     offHeapSizeComboBox.setValue(offHeapValues.get(1));
     cacheCreation.addComponent(offHeapSizeComboBox);
 
     List<String> offHeapUnitValues = Arrays.asList("KB", "MB", "GB");
     ComboBox<String> offHeapUnitComboBox = new ComboBox<>("OffHeap unit", offHeapUnitValues);
+    offHeapUnitComboBox.addStyleName("small-combo");
     offHeapUnitComboBox.setValue(offHeapUnitValues.get(1));
     cacheCreation.addComponent(offHeapUnitComboBox);
 
-
     List<Long> diskValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> diskSizeComboBox = new ComboBox<>("Disk size", diskValues);
+    diskSizeComboBox.addStyleName("small-combo");
     diskSizeComboBox.setEmptySelectionAllowed(false);
     diskSizeComboBox.setValue(diskValues.get(0));
     cacheCreation.addComponent(diskSizeComboBox);
 
     List<String> diskUnitValues = Arrays.asList("KB", "MB", "GB");
     ComboBox<String> diskUnitComboBox = new ComboBox<>("Disk unit", diskUnitValues);
+    diskUnitComboBox.addStyleName("small-combo");
     diskUnitComboBox.setValue(diskUnitValues.get(1));
     cacheCreation.addComponent(diskUnitComboBox);
 
@@ -944,11 +948,10 @@ public class TinyPounderMainUI extends UI {
     clusteredComboBox.setValue(clusteredValues.get(2));
     cacheCreation.addComponent(clusteredComboBox);
 
-
     Button addCacheButton = new Button("Add cache");
     addCacheButton.addStyleName("align-bottom");
-
     cacheCreation.addComponent(addCacheButton);
+
     ListDataProvider<String> listDataProvider = new ListDataProvider<>(cacheNames);
     addCacheButton.addClickListener(clickEvent -> {
       try {
