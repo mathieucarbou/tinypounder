@@ -15,7 +15,6 @@
  */
 package org.terracotta.tinypounder;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -28,24 +27,8 @@ import java.util.concurrent.ScheduledExecutorService;
 @Configuration
 public class TinypounderApplication {
 
-  @Value("${kitPath}")
-  private String kitPath;
-
   public static void main(String[] args) throws Exception {
     SpringApplication.run(TinypounderApplication.class, args);
-  }
-
-  @Bean
-  public KitAwareClassLoaderDelegator initializeKitAwareClassLoader() {
-    KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator = new KitAwareClassLoaderDelegator();
-    if (kitPath != null && kitPath.length() > 0) {
-      try {
-        kitAwareClassLoaderDelegator.setKitPathAndUpdate(kitPath);
-      } catch (Exception e) {
-        new RuntimeException("Please make sure the kitPath is properly set, current value is : " + kitPath, e);
-      }
-    }
-    return kitAwareClassLoaderDelegator;
   }
 
   @Bean(destroyMethod = "shutdownNow")

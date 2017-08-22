@@ -15,6 +15,10 @@
  */
 package org.terracotta.tinypounder;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -25,25 +29,28 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.stream.Stream;
 
+@Service
 public class KitAwareClassLoaderDelegator {
+
+  private ClassLoader urlClassLoader = Thread.currentThread().getContextClassLoader();
+
+  @Autowired
+  private Settings settings;
+
+  @PostConstruct
+  public void init() {
+    String kitPath = settings.getKitPath();
+    if (kitPath != null) {
+      URL[] urls = discoverKitClientJars(kitPath);
+      urlClassLoader = URLClassLoader.newInstance(urls, Thread.currentThread().getContextClassLoader());
+    }
+  }
 
   public ClassLoader getUrlClassLoader() {
     return urlClassLoader;
   }
 
-  private ClassLoader urlClassLoader;
-
-  public String getKitPath() {
-    return kitPath;
-  }
-
-  private String kitPath;
-
-  public KitAwareClassLoaderDelegator() {
-    urlClassLoader = Thread.currentThread().getContextClassLoader();
-  }
-
-  private static URL[] discoverKitClientJars(String kitPath) throws Exception {
+  private static URL[] discoverKitClientJars(String kitPath) {
     Stream<Path> clientEhcacheJarStream = null;
     try {
       clientEhcacheJarStream = Files.walk(Paths.get(kitPath, "/client/ehcache"), 4, FileVisitOption.FOLLOW_LINKS)
@@ -58,14 +65,17 @@ public class KitAwareClassLoaderDelegator {
     } catch (IOException e) {
       // that's fine, it's probably just a kit without tc store
     }
-    Stream<Path> clientLibJarStream;
+    Stream<Path> clientLibJarStream = Stream.empty();
     try {
       clientLibJarStream = Files.walk(Paths.get(kitPath, "/client/lib"), 4, FileVisitOption.FOLLOW_LINKS)
           .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
     } catch (IOException e) {
       // it's possible that the client libs are elsewhere...
-      clientLibJarStream = Files.walk(Paths.get(kitPath, "../common/lib"), 4, FileVisitOption.FOLLOW_LINKS)
-          .filter(path -> path.toFile().getAbsolutePath().endsWith("-client.jar"));
+      try {
+        clientLibJarStream = Files.walk(Paths.get(kitPath, "../common/lib"), 4, FileVisitOption.FOLLOW_LINKS)
+            .filter(path -> path.toFile().getAbsolutePath().endsWith("-client.jar"));
+      } catch (IOException ignored) {
+      }
     }
     Stream<Path> concat = clientEhcacheJarStream != null ? Stream.concat(clientEhcacheJarStream, clientLibJarStream) : clientLibJarStream;
     concat = clientStoreJarStream != null ? Stream.concat(concat, clientStoreJarStream) : concat;
@@ -77,12 +87,6 @@ public class KitAwareClassLoaderDelegator {
       }
       return null;
     }).toArray(URL[]::new);
-  }
-
-  public void setKitPathAndUpdate(String kitPath) throws Exception {
-    URL[] urls = discoverKitClientJars(kitPath);
-    urlClassLoader = URLClassLoader.newInstance(urls, Thread.currentThread().getContextClassLoader());
-    this.kitPath = kitPath;
   }
 
   public boolean containsTerracottaStore() {
@@ -112,4 +116,8 @@ public class KitAwareClassLoaderDelegator {
     }
   }
 
+  public void setKitPath(String kitPath) {
+    settings.setKitPath(kitPath);
+    init();
+  }
 }

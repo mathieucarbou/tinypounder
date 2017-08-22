@@ -77,7 +77,7 @@ class RunningServer {
   }
 
   void refreshConsole() {
-    String text = String.join("\n", lines);
+    String text = String.join("", lines);
     console.setValue(text);
     console.setCursorPosition(text.length());
   }

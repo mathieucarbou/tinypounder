@@ -1,0 +1,190 @@
+package org.terracotta.tinypounder;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.UncheckedIOException;
+import java.util.Properties;
+
+/**
+ * @author Mathieu Carbou
+ */
+@Service
+public class Settings {
+
+  @Value("${kitPath}")
+  private String kitPath;
+
+  @Value("${licensePath}")
+  private String licensePath;
+
+  @Value("${offheapCount}")
+  private int offheapCount;
+
+  @Value("${dataRootCount}")
+  private int dataRootCount;
+
+  @Value("${serverCount}")
+  private int serverCount;
+
+  @Value("${stripeCount}")
+  private int stripeCount;
+
+  @Value("${reconnectWindow}")
+  private int reconnectWindow;
+
+  private final File config = new File(System.getProperty("user.home"), ".tinypounder/config.properties");
+
+  @PostConstruct
+  public void load() {
+    config.getParentFile().mkdirs();
+    Properties properties = new Properties();
+    if (config.exists()) {
+      try (InputStreamReader reader = new InputStreamReader(new FileInputStream(config), "UTF-8")) {
+        properties.load(reader);
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
+      }
+    }
+    // always prefer system props over saved config
+    if (kitPath == null || kitPath.isEmpty()) {
+      kitPath = properties.getProperty("kitPath");
+      File folder = new File(kitPath);
+      if (!folder.exists() || !folder.isDirectory()) {
+        kitPath = null;
+      }
+    }
+    if (licensePath == null || licensePath.isEmpty()) {
+      licensePath = properties.getProperty("licensePath");
+      File file = new File(licensePath);
+      if (!file.exists() || !file.isFile()) {
+        licensePath = null;
+      }
+    }
+    if (offheapCount < 1) {
+      offheapCount = Integer.parseInt(properties.getProperty("offheapCount", "0"));
+      if (offheapCount < 1) {
+        offheapCount = 2;
+      }
+    }
+    if (dataRootCount < 1) {
+      dataRootCount = Integer.parseInt(properties.getProperty("dataRootCount", "0"));
+      if (dataRootCount < 1) {
+        dataRootCount = 2;
+      }
+    }
+    if (serverCount < 1) {
+      serverCount = Integer.parseInt(properties.getProperty("serverCount", "0"));
+      if (serverCount < 1) {
+        serverCount = 2;
+      }
+    }
+    if (stripeCount < 1) {
+      stripeCount = Integer.parseInt(properties.getProperty("stripeCount", "0"));
+      if (stripeCount < 1) {
+        stripeCount = 2;
+      }
+    }
+    if (reconnectWindow < 5) {
+      reconnectWindow = Integer.parseInt(properties.getProperty("reconnectWindow", "0"));
+      if (reconnectWindow < 5) {
+        reconnectWindow = 120;
+      }
+    }
+  }
+
+  @PreDestroy
+  public void save() {
+    Properties properties = new Properties();
+    if (kitPath != null) {
+      properties.setProperty("kitPath", kitPath);
+    }
+    if (licensePath != null) {
+      properties.setProperty("licensePath", licensePath);
+    }
+    if (offheapCount >= 1) {
+      properties.setProperty("offheapCount", String.valueOf(offheapCount));
+    }
+    if (dataRootCount >= 1) {
+      properties.setProperty("dataRootCount", String.valueOf(dataRootCount));
+    }
+    if (serverCount >= 1) {
+      properties.setProperty("serverCount", String.valueOf(serverCount));
+    }
+    if (stripeCount >= 1) {
+      properties.setProperty("stripeCount", String.valueOf(stripeCount));
+    }
+    if (reconnectWindow >= 5) {
+      properties.setProperty("reconnectWindow", String.valueOf(reconnectWindow));
+    }
+    try (OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(config), "UTF-8")) {
+      properties.store(writer, "AUTO-GENERATED FILE");
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
+
+  public String getKitPath() {
+    return kitPath;
+  }
+
+  public void setKitPath(String kitPath) {
+    this.kitPath = kitPath;
+  }
+
+  public String getLicensePath() {
+    return licensePath;
+  }
+
+  public void setLicensePath(String licensePath) {
+    this.licensePath = licensePath;
+  }
+
+  public int getOffheapCount() {
+    return offheapCount;
+  }
+
+  public int getDataRootCount() {
+    return dataRootCount;
+  }
+
+  public int getServerCount() {
+    return serverCount;
+  }
+
+  public int getStripeCount() {
+    return stripeCount;
+  }
+
+  public void setOffheapCount(int offheapCount) {
+    this.offheapCount = offheapCount;
+  }
+
+  public void setDataRootCount(int dataRootCount) {
+    this.dataRootCount = dataRootCount;
+  }
+
+  public void setStripeCount(int stripeCount) {
+    this.stripeCount = stripeCount;
+  }
+
+  public void setServerCount(int serverCount) {
+    this.serverCount = serverCount;
+  }
+
+  public int getReconnectWindow() {
+    return reconnectWindow;
+  }
+
+  public void setReconnectWindow(int reconnectWindow) {
+    this.reconnectWindow = reconnectWindow;
+  }
+}

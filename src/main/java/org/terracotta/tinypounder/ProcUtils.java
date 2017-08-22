@@ -23,7 +23,7 @@ public class ProcUtils {
       @Override
       public void write(int b) throws IOException {
         buffer.write(b);
-        if (((byte) b) == ((byte) 10)) {
+        if (((byte) b) == ((byte) 10)) { // \n
           String newLine = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
           while (!consoleLines.offer(newLine)) {
             consoleLines.poll();
@@ -35,9 +35,9 @@ public class ProcUtils {
     };
 
     consoleLines.clear();
-    consoleLines.offer("Running:");
-    consoleLines.offer(command);
-    consoleLines.offer("...");
+    consoleLines.offer("Running:\n");
+    consoleLines.offer(command + "\n");
+    consoleLines.offer("...\n");
 
     AnyProcess process = AnyProcess.newBuilder()
         .command(ProcUtils.isWindows() ? new String[]{"cmd.exe", "/c", command} : new String[]{"/bin/bash", "-c", command})
