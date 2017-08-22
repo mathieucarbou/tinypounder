@@ -58,8 +58,15 @@ public class KitAwareClassLoaderDelegator {
     } catch (IOException e) {
       // that's fine, it's probably just a kit without tc store
     }
-    Stream<Path> clientLibJarStream = Files.walk(Paths.get(kitPath, "/client/lib"), 4, FileVisitOption.FOLLOW_LINKS)
-        .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
+    Stream<Path> clientLibJarStream;
+    try {
+      clientLibJarStream = Files.walk(Paths.get(kitPath, "/client/lib"), 4, FileVisitOption.FOLLOW_LINKS)
+          .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
+    } catch (IOException e) {
+      // it's possible that the client libs are elsewhere...
+      clientLibJarStream = Files.walk(Paths.get(kitPath, "../common/lib"), 4, FileVisitOption.FOLLOW_LINKS)
+          .filter(path -> path.toFile().getAbsolutePath().endsWith("-client.jar"));
+    }
     Stream<Path> concat = clientEhcacheJarStream != null ? Stream.concat(clientEhcacheJarStream, clientLibJarStream) : clientLibJarStream;
     concat = clientStoreJarStream != null ? Stream.concat(concat, clientStoreJarStream) : concat;
     return concat.map(path -> {
