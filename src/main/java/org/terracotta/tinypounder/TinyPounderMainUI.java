@@ -17,7 +17,7 @@ package org.terracotta.tinypounder;
 
 import com.vaadin.annotations.PreserveOnRefresh;
 import com.vaadin.annotations.Push;
-import com.vaadin.annotations.StyleSheet;
+import com.vaadin.annotations.Theme;
 import com.vaadin.annotations.Title;
 import com.vaadin.data.HasValue;
 import com.vaadin.data.provider.ListDataProvider;
@@ -69,11 +69,9 @@ import java.util.stream.Collectors;
 
 /**
  * The UI class
- * <p>
- * This class should never import anything from the Ehcache API
  */
 @Title("Tiny Pounder")
-@StyleSheet("tinypounder.css")
+@Theme("tinypounder")
 @Push
 @SpringUI
 @PreserveOnRefresh
@@ -391,11 +389,13 @@ public class TinyPounderMainUI extends UI {
           Button startBT = new Button();
           startBT.setCaption("START");
           startBT.setData(serverName);
+          startBT.setStyleName("align-top");
           serverControls.addComponent(startBT);
 
           Button stopBT = new Button();
           stopBT.setEnabled(false);
           stopBT.setCaption("STOP");
+          stopBT.setStyleName("align-top");
           stopBT.setData(serverName);
           serverControls.addComponent(stopBT);
 
@@ -1134,7 +1134,7 @@ public class TinyPounderMainUI extends UI {
     serverDiskPersistenceLocationField.setValue("dataroot-1");
 
 
-    CheckBox clusteredCheckBox = new CheckBox("Clustered", true);
+    CheckBox clusteredCheckBox = new CheckBox("Clustered service", true);
     clusteredCheckBox.addStyleName("align-bottom");
     clusteredCheckBox.addValueChangeListener(valueChangeEvent -> {
       if (valueChangeEvent.getValue()) {
@@ -1155,7 +1155,7 @@ public class TinyPounderMainUI extends UI {
     diskPersistenceLocationField.setCaption("Local disk folder");
     diskPersistenceLocationField.setValue("tinyPounderDiskPersistence");
 
-    CheckBox diskCheckBox = new CheckBox("Local disk", true);
+    CheckBox diskCheckBox = new CheckBox("Persistence", true);
     diskCheckBox.addStyleName("align-bottom");
     diskCheckBox.addValueChangeListener(valueChangeEvent -> {
       if (valueChangeEvent.getValue()) {
@@ -1166,7 +1166,6 @@ public class TinyPounderMainUI extends UI {
     });
 
     Button createCacheManagerButton = new Button("Initialize CacheManager");
-    createCacheManagerButton.addStyleName("align-bottom");
 
     createCacheManagerButton.addClickListener(event -> {
       try {
