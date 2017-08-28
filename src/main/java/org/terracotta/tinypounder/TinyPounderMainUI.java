@@ -461,7 +461,6 @@ public class TinyPounderMainUI extends UI {
           access(() -> {
             stopBT.setEnabled(false);
             startBT.setEnabled(true);
-            voltronConfigLayout.setEnabled(runningServers.isEmpty());
             kitPathBT.setEnabled(runningServers.isEmpty());
             pidLBL.setValue("");
             stateLBL.setValue("STOPPED");
@@ -479,7 +478,6 @@ public class TinyPounderMainUI extends UI {
     consoles.setSelectedTab(console);
     stateLBL.setValue("STARTING");
     runningServer.start();
-    voltronConfigLayout.setEnabled(false);
     kitPathBT.setEnabled(false);
     startBT.setEnabled(false);
     stopBT.setEnabled(true);
