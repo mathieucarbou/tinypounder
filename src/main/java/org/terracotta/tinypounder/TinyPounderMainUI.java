@@ -913,6 +913,7 @@ public class TinyPounderMainUI extends UI {
     List<Long> onHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> onHeapSizeComboBox = new ComboBox<>("OnHeap size", onHeapValues);
     onHeapSizeComboBox.addStyleName("small-combo");
+    onHeapSizeComboBox.setTextInputAllowed(false);
     onHeapSizeComboBox.setEmptySelectionAllowed(false);
     onHeapSizeComboBox.setValue(onHeapValues.get(3));
     cacheCreation.addComponent(onHeapSizeComboBox);
@@ -920,11 +921,14 @@ public class TinyPounderMainUI extends UI {
     List<String> onHeapUnitValues = Arrays.asList("ENTRIES", "KB", "MB", "GB");
     ComboBox<String> onHeapUnitComboBox = new ComboBox<>("OnHeap unit", onHeapUnitValues);
     onHeapUnitComboBox.setValue(onHeapUnitValues.get(0));
+    onHeapUnitComboBox.setEmptySelectionAllowed(false);
+    onHeapUnitComboBox.setTextInputAllowed(false);
     cacheCreation.addComponent(onHeapUnitComboBox);
 
     List<Long> offHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> offHeapSizeComboBox = new ComboBox<>("Offheap size", offHeapValues);
     offHeapSizeComboBox.addStyleName("small-combo");
+    offHeapSizeComboBox.setTextInputAllowed(false);
     offHeapSizeComboBox.setEmptySelectionAllowed(false);
     offHeapSizeComboBox.setValue(offHeapValues.get(1));
     cacheCreation.addComponent(offHeapSizeComboBox);
@@ -933,24 +937,30 @@ public class TinyPounderMainUI extends UI {
     ComboBox<String> offHeapUnitComboBox = new ComboBox<>("OffHeap unit", offHeapUnitValues);
     offHeapUnitComboBox.addStyleName("small-combo");
     offHeapUnitComboBox.setValue(offHeapUnitValues.get(1));
+    offHeapUnitComboBox.setEmptySelectionAllowed(false);
+    offHeapUnitComboBox.setTextInputAllowed(false);
     cacheCreation.addComponent(offHeapUnitComboBox);
 
     List<Long> diskValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> diskSizeComboBox = new ComboBox<>("Disk size", diskValues);
     diskSizeComboBox.addStyleName("small-combo");
     diskSizeComboBox.setEmptySelectionAllowed(false);
+    diskSizeComboBox.setTextInputAllowed(false);
     diskSizeComboBox.setValue(diskValues.get(0));
     cacheCreation.addComponent(diskSizeComboBox);
 
     List<String> diskUnitValues = Arrays.asList("KB", "MB", "GB");
     ComboBox<String> diskUnitComboBox = new ComboBox<>("Disk unit", diskUnitValues);
     diskUnitComboBox.addStyleName("small-combo");
+    diskUnitComboBox.setEmptySelectionAllowed(false);
+    diskUnitComboBox.setTextInputAllowed(false);
     diskUnitComboBox.setValue(diskUnitValues.get(1));
     cacheCreation.addComponent(diskUnitComboBox);
 
     List<String> clusteredValues = Arrays.asList("NONE", "shared", "dedicated 10MB", "dedicated 100MB");
     ComboBox<String> clusteredComboBox = new ComboBox<>("Clustered tier", clusteredValues);
     clusteredComboBox.setEmptySelectionAllowed(false);
+    clusteredComboBox.setTextInputAllowed(false);
     clusteredComboBox.setValue(clusteredValues.get(2));
     cacheCreation.addComponent(clusteredComboBox);
 
