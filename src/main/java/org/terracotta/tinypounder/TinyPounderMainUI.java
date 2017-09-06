@@ -40,15 +40,12 @@ import com.vaadin.ui.TabSheet;
 import com.vaadin.ui.TextArea;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.UI;
-import com.vaadin.ui.Upload;
 import com.vaadin.ui.VerticalLayout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
 
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -123,7 +120,6 @@ public class TinyPounderMainUI extends UI {
   private CheckBox platformBackup;
   private TextArea tcConfigXml;
   private GridLayout kitPathLayout;
-  private File temporaryUploadedLicenseFile;
   private TextField clusterNameTF;
   private Map<String, File> tcConfigLocationPerStripe = new ConcurrentHashMap<>();
   private GridLayout serverControls;
@@ -132,7 +128,6 @@ public class TinyPounderMainUI extends UI {
   private Map<String, RunningServer> runningServers = new ConcurrentHashMap<>();
   private VerticalLayout kitControlsLayout;
   private ScheduledFuture<?> consoleRefresher;
-  private Button kitPathBT;
   private Button generateTcConfig;
 
   @Override
@@ -143,6 +138,7 @@ public class TinyPounderMainUI extends UI {
     initVoltronConfigLayout();
     initVoltronControlLayout();
     initRuntimeLayout();
+    addExitCloseTab();
     updateServerGrid();
 
     // refresh consoles if any
@@ -151,33 +147,50 @@ public class TinyPounderMainUI extends UI {
         2, 2, TimeUnit.SECONDS);
   }
 
+  private void addExitCloseTab() {
+    VerticalLayout exitLayout = new VerticalLayout();
+    exitLayout.addComponentsAndExpand(new Label("We hope you had fun using the TinyPounder, it is now shutdown, " +
+        "as well as all the DatasetManagers, CacheManagers, and Terracotta servers you started with it"));
+    TabSheet.Tab tab = mainLayout.addTab(exitLayout, "EXIT : Close TinyPounder");
+    tab.setStyleName("tab-absolute-right");
+    mainLayout.addSelectedTabChangeListener(tabEvent -> {
+      if (tabEvent.getTabSheet().getSelectedTab().equals(tab.getComponent())) {
+        new Thread(() -> {
+          runningServers.values().forEach(RunningServer::stop);
+          consoleRefresher.cancel(true);
+          SpringApplication.exit(appContext);
+        }).start();
+      }
+    });
+  }
+
   private void updateKitControls() {
     if (kitAwareClassLoaderDelegator.isEEKit()) {
       if (kitPathLayout.getRows() == 1) {
-        TextField path = new TextField();
-        path.setWidth(100, Unit.PERCENTAGE);
-        path.setValue(settings.getLicensePath() == null ? "" : settings.getLicensePath());
-        path.addValueChangeListener(event -> settings.setLicensePath(event.getValue()));
-        path.setPlaceholder("License location");
-        Upload upload = new Upload();
-        upload.setReceiver((Upload.Receiver) (filename, mimeType) -> {
-          File tmpDir = new File(System.getProperty("java.io.tmpdir"));
-          temporaryUploadedLicenseFile = new File(tmpDir, filename);
-          temporaryUploadedLicenseFile.deleteOnExit();
+        final TextField licensePath = new TextField();
+        licensePath.setWidth(100, Unit.PERCENTAGE);
+        licensePath.setValue(settings.getLicensePath() == null ? "" : settings.getLicensePath());
+        licensePath.addValueChangeListener(event -> settings.setLicensePath(event.getValue()));
+        licensePath.setPlaceholder("License location");
+        licensePath.addValueChangeListener(event -> {
           try {
-            return new FileOutputStream(temporaryUploadedLicenseFile);
-          } catch (FileNotFoundException e) {
-            throw new UncheckedIOException(e);
+            Notification notification = new Notification("License location updated with success !",
+                Notification.Type.TRAY_NOTIFICATION);
+            notification.setStyleName("warning");
+            notification.show(Page.getCurrent());
+            String licensePathValue = licensePath.getValue();
+            if (licensePathValue != null) {
+              File file = new File(licensePathValue);
+              if (!file.exists() || !file.isFile()) {
+                throw new NoSuchFileException("Path does not exist on the system !");
+              }
+            }
+            settings.setLicensePath(event.getValue());
+          } catch (NoSuchFileException e) {
+            displayErrorNotification("Kit path could not update !", "Make sure the path points to a valid license file !");
           }
         });
-        upload.setButtonCaption("Browse...");
-        upload.setImmediateMode(true);
-        upload.addSucceededListener((Upload.SucceededListener) event -> {
-          settings.setLicensePath(temporaryUploadedLicenseFile.getAbsolutePath());
-          path.setValue(settings.getLicensePath());
-        });
-        kitPathLayout.addComponent(path);
-        kitPathLayout.addComponent(upload);
+        kitPathLayout.addComponent(licensePath);
       }
     } else {
       if (kitPathLayout.getRows() == 2) {
@@ -461,7 +474,6 @@ public class TinyPounderMainUI extends UI {
           access(() -> {
             stopBT.setEnabled(false);
             startBT.setEnabled(true);
-            kitPathBT.setEnabled(runningServers.isEmpty());
             pidLBL.setValue("");
             stateLBL.setValue("STOPPED");
           });
@@ -478,7 +490,6 @@ public class TinyPounderMainUI extends UI {
     consoles.setSelectedTab(console);
     stateLBL.setValue("STARTING");
     runningServer.start();
-    kitPathBT.setEnabled(false);
     startBT.setEnabled(false);
     stopBT.setEnabled(true);
     runningServer.refreshConsole();
@@ -1242,7 +1253,7 @@ public class TinyPounderMainUI extends UI {
   private void addKitControls() {
 
     kitControlsLayout = new VerticalLayout();
-    kitPathLayout = new GridLayout(2, 1);
+    kitPathLayout = new GridLayout(1, 1);
     kitPathLayout.setWidth(100, Unit.PERCENTAGE);
     kitPathLayout.setColumnExpandRatio(0, 2);
 
@@ -1256,13 +1267,7 @@ public class TinyPounderMainUI extends UI {
     kitPath.setPlaceholder("Kit location");
     kitPath.setWidth("100%");
     kitPath.setValue(settings.getKitPath() != null ? settings.getKitPath() : "");
-    kitPathBT = new Button("Update kit path");
-    kitPathBT.setEnabled(false);
-    kitPath.addValueChangeListener(event -> kitPathBT.setEnabled(true));
-    kitPathLayout.addComponent(kitPath);
-    kitPathLayout.addComponent(kitPathBT);
-
-    kitPathBT.addClickListener(event -> {
+    kitPath.addValueChangeListener(event -> {
       try {
         kitAwareClassLoaderDelegator.setKitPath(kitPath.getValue());
         info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise" : "Open source") + " Kit");
@@ -1277,27 +1282,21 @@ public class TinyPounderMainUI extends UI {
         initVoltronControlLayout();
         initRuntimeLayout();
         updateServerGrid();
+        Notification notification = new Notification("Kit location updated with success !",
+            Notification.Type.TRAY_NOTIFICATION);
+        notification.setStyleName("warning");
+        notification.show(Page.getCurrent());
       } catch (Exception e) {
-        if (e instanceof NoSuchFileException) {
+        if (e.getCause() instanceof NoSuchFileException) {
           displayErrorNotification("Kit path could not update !", "Make sure the path points to a kit !");
         } else {
           displayErrorNotification("Kit path could not update !", ExceptionUtils.getRootCauseMessage(e));
         }
-
       }
     });
-
+    kitPathLayout.addComponent(kitPath);
     kitControlsLayout.addComponent(info);
     kitControlsLayout.addComponent(kitPathLayout);
-
-    Button exitBT = new Button("Close TinyPounder");
-    exitBT.addClickListener(event -> new Thread(() -> {
-      runningServers.values().forEach(RunningServer::stop);
-      consoleRefresher.cancel(true);
-      SpringApplication.exit(appContext);
-    }).start());
-    kitControlsLayout.addComponent(exitBT);
-
     mainLayout.addTab(kitControlsLayout, "STEP 1: KIT");
   }
 

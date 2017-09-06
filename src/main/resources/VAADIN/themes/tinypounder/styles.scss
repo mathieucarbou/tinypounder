@@ -106,3 +106,12 @@ textarea.console {
   /*display: inline-block !important;*/
   padding-right: 10px !important;
 }
+
+td.v-tabsheet-tabitemcell-tab-absolute-right {
+  position: absolute;
+  right: 0px;
+}
+
+.v-tabsheet-tabs {
+  width: 100%;
+}
