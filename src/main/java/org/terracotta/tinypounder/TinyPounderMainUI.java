@@ -898,6 +898,7 @@ public class TinyPounderMainUI extends UI {
         path.setPlaceholder("Location");
         path.setValue(new File(baseLocation.getValue(), "data/dataroot-" + (r - header + 1)).getAbsolutePath());
         path.setEnabled(false);
+        id.addValueChangeListener(event -> path.setValue(new File(baseLocation.getValue(), "data/" + event.getValue()).getAbsolutePath()));
         path.setWidth(100, Unit.PERCENTAGE);
         dataRootGrid.addComponent(id, 0, r, 1, r);
         dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, r);
@@ -983,6 +984,7 @@ public class TinyPounderMainUI extends UI {
               logs.setPlaceholder("Location");
               logs.setValue(new File(baseLocation.getValue(), "logs/" + name.getValue()).getAbsolutePath());
               logs.setEnabled(false);
+              name.addValueChangeListener(event -> logs.setValue(new File(baseLocation.getValue(), "logs/" + name.getValue()).getAbsolutePath()));
               TextField clientPort = new TextField();
               clientPort.setPlaceholder("Client port");
               clientPort.setValue("" + (9410 + (r - 1) * 10 + (c - 1)));
