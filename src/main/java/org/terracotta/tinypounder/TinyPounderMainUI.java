@@ -40,21 +40,22 @@ import com.vaadin.ui.TabSheet;
 import com.vaadin.ui.TextArea;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.UI;
-import com.vaadin.ui.Upload;
 import com.vaadin.ui.VerticalLayout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
 
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -65,6 +66,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -123,7 +125,6 @@ public class TinyPounderMainUI extends UI {
   private CheckBox platformBackup;
   private TextArea tcConfigXml;
   private GridLayout kitPathLayout;
-  private File temporaryUploadedLicenseFile;
   private TextField clusterNameTF;
   private Map<String, File> tcConfigLocationPerStripe = new ConcurrentHashMap<>();
   private GridLayout serverControls;
@@ -132,8 +133,9 @@ public class TinyPounderMainUI extends UI {
   private Map<String, RunningServer> runningServers = new ConcurrentHashMap<>();
   private VerticalLayout kitControlsLayout;
   private ScheduledFuture<?> consoleRefresher;
-  private Button kitPathBT;
   private Button generateTcConfig;
+  private TextField baseLocation;
+  private Button trashDataButton;
 
   @Override
   protected void init(VaadinRequest vaadinRequest) {
@@ -143,6 +145,7 @@ public class TinyPounderMainUI extends UI {
     initVoltronConfigLayout();
     initVoltronControlLayout();
     initRuntimeLayout();
+    addExitCloseTab();
     updateServerGrid();
 
     // refresh consoles if any
@@ -151,33 +154,46 @@ public class TinyPounderMainUI extends UI {
         2, 2, TimeUnit.SECONDS);
   }
 
+  private void addExitCloseTab() {
+    VerticalLayout exitLayout = new VerticalLayout();
+    exitLayout.addComponentsAndExpand(new Label("We hope you had fun using the TinyPounder, it is now shutdown, " +
+        "as well as all the DatasetManagers, CacheManagers, and Terracotta servers you started with it"));
+    TabSheet.Tab tab = mainLayout.addTab(exitLayout, "EXIT : Close TinyPounder");
+    tab.setStyleName("tab-absolute-right");
+    mainLayout.addSelectedTabChangeListener(tabEvent -> {
+      if (tabEvent.getTabSheet().getSelectedTab().equals(tab.getComponent())) {
+        new Thread(() -> {
+          runningServers.values().forEach(RunningServer::stop);
+          consoleRefresher.cancel(true);
+          SpringApplication.exit(appContext);
+        }).start();
+      }
+    });
+  }
+
   private void updateKitControls() {
     if (kitAwareClassLoaderDelegator.isEEKit()) {
       if (kitPathLayout.getRows() == 1) {
-        TextField path = new TextField();
-        path.setWidth(100, Unit.PERCENTAGE);
-        path.setValue(settings.getLicensePath() == null ? "" : settings.getLicensePath());
-        path.addValueChangeListener(event -> settings.setLicensePath(event.getValue()));
-        path.setPlaceholder("License location");
-        Upload upload = new Upload();
-        upload.setReceiver((Upload.Receiver) (filename, mimeType) -> {
-          File tmpDir = new File(System.getProperty("java.io.tmpdir"));
-          temporaryUploadedLicenseFile = new File(tmpDir, filename);
-          temporaryUploadedLicenseFile.deleteOnExit();
+        final TextField licensePath = new TextField();
+        licensePath.setWidth(100, Unit.PERCENTAGE);
+        licensePath.setValue(settings.getLicensePath() == null ? "" : settings.getLicensePath());
+        licensePath.setPlaceholder("License location");
+        licensePath.addValueChangeListener(event -> {
           try {
-            return new FileOutputStream(temporaryUploadedLicenseFile);
-          } catch (FileNotFoundException e) {
-            throw new UncheckedIOException(e);
+            displayWarningNotification("License location updated with success !");
+            String licensePathValue = licensePath.getValue();
+            if (licensePathValue != null) {
+              File file = new File(licensePathValue);
+              if (!file.exists() || !file.isFile()) {
+                throw new NoSuchFileException("Path does not exist on the system !");
+              }
+            }
+            settings.setLicensePath(event.getValue());
+          } catch (NoSuchFileException e) {
+            displayErrorNotification("Kit path could not update !", "Make sure the path points to a valid license file !");
           }
         });
-        upload.setButtonCaption("Browse...");
-        upload.setImmediateMode(true);
-        upload.addSucceededListener((Upload.SucceededListener) event -> {
-          settings.setLicensePath(temporaryUploadedLicenseFile.getAbsolutePath());
-          path.setValue(settings.getLicensePath());
-        });
-        kitPathLayout.addComponent(path);
-        kitPathLayout.addComponent(upload);
+        kitPathLayout.addComponent(licensePath);
       }
     } else {
       if (kitPathLayout.getRows() == 2) {
@@ -187,11 +203,11 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void initRuntimeLayout() {
-    if (datasetLayout == null && cacheLayout == null
-        && (kitAwareClassLoaderDelegator.containsTerracottaStore() || kitAwareClassLoaderDelegator.containsEhcache())) {
+    if (mainLayout.getTab(runtimeLayout) == null) {
       runtimeLayout = new VerticalLayout();
       mainLayout.addTab(runtimeLayout, "STEP 4: DATASETS & CACHES");
-
+    }
+    if (kitAwareClassLoaderDelegator.containsTerracottaStore() || kitAwareClassLoaderDelegator.containsEhcache()) {
       initCacheLayout();
       initDatasetLayout();
     }
@@ -203,6 +219,10 @@ public class TinyPounderMainUI extends UI {
       datasetLayout.addStyleName("dataset-layout");
       runtimeLayout.addComponentsAndExpand(datasetLayout);
       addDatasetManagerControls();
+    } else if (!kitAwareClassLoaderDelegator.containsTerracottaStore() && datasetLayout != null) {
+      // kit does no longer contain tc store libs; clear the datasetLayout
+      runtimeLayout.removeComponent(datasetLayout);
+      datasetLayout = null;
     }
   }
 
@@ -212,6 +232,10 @@ public class TinyPounderMainUI extends UI {
       cacheLayout.addStyleName("cache-layout");
       runtimeLayout.addComponentsAndExpand(cacheLayout);
       addCacheManagerControls();
+    } else if (!kitAwareClassLoaderDelegator.containsEhcache() && cacheLayout != null) {
+      // kit does no longer contain ehcache libs; clear the cacheLayout
+      runtimeLayout.removeComponent(cacheLayout);
+      cacheLayout = null;
     }
   }
 
@@ -220,7 +244,12 @@ public class TinyPounderMainUI extends UI {
       if (voltronConfigLayout == null) {
         voltronConfigLayout = new VerticalLayout();
         voltronConfigLayout.addStyleName("voltron-config-layout");
-        mainLayout.addTab(voltronConfigLayout, "STEP 2: SERVER CONFIGURATIONS");
+        TabSheet.Tab tab = mainLayout.addTab(voltronConfigLayout, "STEP 2: SERVER CONFIGURATIONS");
+        mainLayout.addSelectedTabChangeListener(tabEvent -> {
+          if (tabEvent.getTabSheet().getSelectedTab().equals(tab.getComponent())) {
+            changeTrashButtonStatus(baseLocation.getValue());
+          }
+        });
       }
       addVoltronConfigControls();
     }
@@ -461,7 +490,6 @@ public class TinyPounderMainUI extends UI {
           access(() -> {
             stopBT.setEnabled(false);
             startBT.setEnabled(true);
-            kitPathBT.setEnabled(runningServers.isEmpty());
             pidLBL.setValue("");
             stateLBL.setValue("STOPPED");
           });
@@ -478,7 +506,6 @@ public class TinyPounderMainUI extends UI {
     consoles.setSelectedTab(console);
     stateLBL.setValue("STARTING");
     runningServer.start();
-    kitPathBT.setEnabled(false);
     startBT.setEnabled(false);
     stopBT.setEnabled(true);
     runningServer.refreshConsole();
@@ -496,6 +523,62 @@ public class TinyPounderMainUI extends UI {
   private void addVoltronConfigControls() {
     VerticalLayout layout = new VerticalLayout();
     boolean ee = kitAwareClassLoaderDelegator.isEEKit();
+
+    HorizontalLayout locationLayout = new HorizontalLayout();
+    // trash data button
+    trashDataButton = new Button("Delete this folder");
+    trashDataButton.setStyleName("delete");
+
+    // base location
+    baseLocation = new TextField();
+    baseLocation.setStyleName("base");
+    baseLocation.setCaption("Base location for logs, backups and dataroots");
+    baseLocation.addValueChangeListener(event -> {
+      String pathname = event.getValue();
+      changeTrashButtonStatus(pathname);
+    });
+    baseLocation.setValue(new File(HOME, "terracotta/MyCluster").getAbsolutePath());
+    trashDataButton.addClickListener(event -> {
+      File file = new File(baseLocation.getValue());
+      if (file.exists() && new File(file, "logs").exists() && new File(file, "data").exists()) {
+        Path rootPath = file.toPath();
+        try {
+          Files.walk(rootPath, FileVisitOption.FOLLOW_LINKS)
+              .sorted(Comparator.reverseOrder())
+              .map(Path::toFile)
+              .peek(System.out::println)
+              .forEach(File::delete);
+          displayWarningNotification("Folder deleted with success");
+          changeTrashButtonStatus(baseLocation.getValue());
+        } catch (IOException e) {
+          displayErrorNotification("Could not delete the folder", ExceptionUtils.getRootCauseMessage(e));
+        }
+      } else {
+        displayErrorNotification("Could not delete the folder", "Either folder does not exist or does not have logs/ nor data/ in it");
+      }
+    });
+    baseLocation.addValueChangeListener(event -> {
+      String oldValue = event.getOldValue();
+      String eventValue = event.getValue();
+      Consumer<Component> updatePath = component -> {
+        if (component instanceof TextField && !component.isEnabled()) {
+          ((TextField) component).setValue(((TextField) component).getValue().replace(oldValue, eventValue));
+        } else if (component instanceof FormLayout) {
+          ((FormLayout) component).forEach(subComponent -> {
+            if (subComponent instanceof TextField && !subComponent.isEnabled()) {
+              ((TextField) subComponent).setValue(((TextField) subComponent).getValue().replace(oldValue, eventValue));
+            }
+          });
+        }
+      };
+      dataRootGrid.iterator().forEachRemaining(updatePath);
+      serverGrid.iterator().forEachRemaining(updatePath);
+      clusterNameTF.setValue(Paths.get(eventValue).getFileName().toString());
+    });
+
+    locationLayout.addComponentsAndExpand(baseLocation, trashDataButton);
+
+    layout.addComponentsAndExpand(locationLayout);
 
     // offheap resources
     {
@@ -528,7 +611,7 @@ public class TinyPounderMainUI extends UI {
       // data roots
       dataRoots = new Slider(nData + " data roots", 1, 10);
       dataRoots.setValue((double) nData);
-      dataRoots.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
+      dataRoots.addValueChangeListener(event -> {
         dataRoots.setCaption(event.getValue().intValue() + " data roots");
         settings.setDataRootCount(event.getValue().intValue());
         updateDataRootGrid();
@@ -573,7 +656,7 @@ public class TinyPounderMainUI extends UI {
 
       servers = new Slider(nServers + " servers per stripe", 1, 4);
       servers.setValue((double) nServers);
-      servers.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
+      servers.addValueChangeListener(event -> {
         servers.setCaption(event.getValue().intValue() + " servers per stripe");
         settings.setServerCount(event.getValue().intValue());
         updateServerGrid();
@@ -582,7 +665,7 @@ public class TinyPounderMainUI extends UI {
 
       reconnectWindow = new Slider("Reconnect window: " + nReconWin + " seconds", 5, 300);
       reconnectWindow.setValue((double) nReconWin);
-      reconnectWindow.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
+      reconnectWindow.addValueChangeListener(event -> {
         reconnectWindow.setCaption("Reconnect window: " + event.getValue().intValue() + " seconds");
         settings.setReconnectWindow(event.getValue().intValue());
       });
@@ -612,6 +695,22 @@ public class TinyPounderMainUI extends UI {
     }
 
     voltronConfigLayout.addComponentsAndExpand(layout);
+  }
+
+  private void changeTrashButtonStatus(String pathname) {
+    File file = new File(pathname);
+    if (!file.exists()) {
+      trashDataButton.setEnabled(false);
+      trashDataButton.setCaption("Folder will be created");
+    } else {
+      if (file.isDirectory()) {
+        trashDataButton.setEnabled(true);
+        trashDataButton.setCaption("Delete this folder");
+      } else {
+        trashDataButton.setEnabled(false);
+        trashDataButton.setCaption("What kind of path is that ?");
+      }
+    }
   }
 
   private void generateXML() {
@@ -797,7 +896,9 @@ public class TinyPounderMainUI extends UI {
         id.setValue("dataroot-" + (r - header + 1));
         TextField path = new TextField();
         path.setPlaceholder("Location");
-        path.setValue(new File(HOME, "terracotta/cluster/data/dataroot-" + (r - header + 1)).getAbsolutePath());
+        path.setValue(new File(baseLocation.getValue(), "data/dataroot-" + (r - header + 1)).getAbsolutePath());
+        path.setEnabled(false);
+        id.addValueChangeListener(event -> path.setValue(new File(baseLocation.getValue(), "data/" + event.getValue()).getAbsolutePath()));
         path.setWidth(100, Unit.PERCENTAGE);
         dataRootGrid.addComponent(id, 0, r, 1, r);
         dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, r);
@@ -815,7 +916,8 @@ public class TinyPounderMainUI extends UI {
       id.setReadOnly(true);
       TextField path = new TextField();
       path.setPlaceholder("Location");
-      path.setValue(new File(HOME, "terracotta/cluster/data/backup").getAbsolutePath());
+      path.setValue(new File(baseLocation.getValue(), "data/backup").getAbsolutePath());
+      path.setEnabled(false);
       path.setWidth(100, Unit.PERCENTAGE);
       dataRootGrid.addComponent(id, 0, row, 1, row);
       dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, row);
@@ -834,7 +936,8 @@ public class TinyPounderMainUI extends UI {
       id.setReadOnly(true);
       TextField path = new TextField();
       path.setPlaceholder("Location");
-      path.setValue(new File(HOME, "terracotta/cluster/data/platform").getAbsolutePath());
+      path.setValue(new File(baseLocation.getValue(), "data/platform").getAbsolutePath());
+      path.setEnabled(false);
       path.setWidth(100, Unit.PERCENTAGE);
       dataRootGrid.addComponent(id, 0, row, 1, row);
       dataRootGrid.addComponent(path, DATAROOT_PATH_COLUMN, row);
@@ -879,7 +982,9 @@ public class TinyPounderMainUI extends UI {
               name.addValueChangeListener(event -> updateServerControls());
               TextField logs = new TextField();
               logs.setPlaceholder("Location");
-              logs.setValue(new File(HOME, "terracotta/cluster/logs/" + name.getValue()).getAbsolutePath());
+              logs.setValue(new File(baseLocation.getValue(), "logs/" + name.getValue()).getAbsolutePath());
+              logs.setEnabled(false);
+              name.addValueChangeListener(event -> logs.setValue(new File(baseLocation.getValue(), "logs/" + name.getValue()).getAbsolutePath()));
               TextField clientPort = new TextField();
               clientPort.setPlaceholder("Client port");
               clientPort.setValue("" + (9410 + (r - 1) * 10 + (c - 1)));
@@ -913,6 +1018,7 @@ public class TinyPounderMainUI extends UI {
     List<Long> onHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> onHeapSizeComboBox = new ComboBox<>("OnHeap size", onHeapValues);
     onHeapSizeComboBox.addStyleName("small-combo");
+    onHeapSizeComboBox.setTextInputAllowed(false);
     onHeapSizeComboBox.setEmptySelectionAllowed(false);
     onHeapSizeComboBox.setValue(onHeapValues.get(3));
     cacheCreation.addComponent(onHeapSizeComboBox);
@@ -920,11 +1026,14 @@ public class TinyPounderMainUI extends UI {
     List<String> onHeapUnitValues = Arrays.asList("ENTRIES", "KB", "MB", "GB");
     ComboBox<String> onHeapUnitComboBox = new ComboBox<>("OnHeap unit", onHeapUnitValues);
     onHeapUnitComboBox.setValue(onHeapUnitValues.get(0));
+    onHeapUnitComboBox.setEmptySelectionAllowed(false);
+    onHeapUnitComboBox.setTextInputAllowed(false);
     cacheCreation.addComponent(onHeapUnitComboBox);
 
     List<Long> offHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> offHeapSizeComboBox = new ComboBox<>("Offheap size", offHeapValues);
     offHeapSizeComboBox.addStyleName("small-combo");
+    offHeapSizeComboBox.setTextInputAllowed(false);
     offHeapSizeComboBox.setEmptySelectionAllowed(false);
     offHeapSizeComboBox.setValue(offHeapValues.get(1));
     cacheCreation.addComponent(offHeapSizeComboBox);
@@ -933,24 +1042,30 @@ public class TinyPounderMainUI extends UI {
     ComboBox<String> offHeapUnitComboBox = new ComboBox<>("OffHeap unit", offHeapUnitValues);
     offHeapUnitComboBox.addStyleName("small-combo");
     offHeapUnitComboBox.setValue(offHeapUnitValues.get(1));
+    offHeapUnitComboBox.setEmptySelectionAllowed(false);
+    offHeapUnitComboBox.setTextInputAllowed(false);
     cacheCreation.addComponent(offHeapUnitComboBox);
 
     List<Long> diskValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
     ComboBox<Long> diskSizeComboBox = new ComboBox<>("Disk size", diskValues);
     diskSizeComboBox.addStyleName("small-combo");
     diskSizeComboBox.setEmptySelectionAllowed(false);
+    diskSizeComboBox.setTextInputAllowed(false);
     diskSizeComboBox.setValue(diskValues.get(0));
     cacheCreation.addComponent(diskSizeComboBox);
 
     List<String> diskUnitValues = Arrays.asList("KB", "MB", "GB");
     ComboBox<String> diskUnitComboBox = new ComboBox<>("Disk unit", diskUnitValues);
     diskUnitComboBox.addStyleName("small-combo");
+    diskUnitComboBox.setEmptySelectionAllowed(false);
+    diskUnitComboBox.setTextInputAllowed(false);
     diskUnitComboBox.setValue(diskUnitValues.get(1));
     cacheCreation.addComponent(diskUnitComboBox);
 
     List<String> clusteredValues = Arrays.asList("NONE", "shared", "dedicated 10MB", "dedicated 100MB");
     ComboBox<String> clusteredComboBox = new ComboBox<>("Clustered tier", clusteredValues);
     clusteredComboBox.setEmptySelectionAllowed(false);
+    clusteredComboBox.setTextInputAllowed(false);
     clusteredComboBox.setValue(clusteredValues.get(2));
     cacheCreation.addComponent(clusteredComboBox);
 
@@ -988,10 +1103,7 @@ public class TinyPounderMainUI extends UI {
         cacheNames.add(cacheNameField.getValue());
         refreshCacheStuff(listDataProvider);
         cacheNameField.clear();
-        Notification notification = new Notification("Cache added with success !",
-            Notification.Type.TRAY_NOTIFICATION);
-        notification.setStyleName("warning");
-        notification.show(Page.getCurrent());
+        displayWarningNotification("Cache added with success !");
       } catch (RuntimeException e) {
         displayErrorNotification("Cache could not be added !", ExceptionUtils.getRootCauseMessage(e));
       }
@@ -1023,10 +1135,7 @@ public class TinyPounderMainUI extends UI {
           cacheManagerBusiness.removeCache(cacheName);
           cacheNames.remove(cacheName);
           refreshCacheStuff(listDataProvider);
-          Notification notification = new Notification("Cache removed with success !",
-              Notification.Type.TRAY_NOTIFICATION);
-          notification.setStyleName("warning");
-          notification.show(Page.getCurrent());
+          displayWarningNotification("Cache removed with success !");
         } catch (RuntimeException e) {
           displayErrorNotification("Cache could not be removed !", ExceptionUtils.getRootCauseMessage(e));
           refreshCacheStuff(listDataProvider);
@@ -1039,10 +1148,7 @@ public class TinyPounderMainUI extends UI {
           cacheManagerBusiness.destroyCache(cacheName);
           cacheNames.remove(cacheName);
           refreshCacheStuff(listDataProvider);
-          Notification notification = new Notification("Cache destroyed with success !",
-              Notification.Type.TRAY_NOTIFICATION);
-          notification.setStyleName("warning");
-          notification.show(Page.getCurrent());
+          displayWarningNotification("Cache destroyed with success !");
         } catch (Exception e) {
           displayErrorNotification("Cache could not be destroyed !", ExceptionUtils.getRootCauseMessage(e));
           refreshCacheStuff(listDataProvider);
@@ -1065,6 +1171,14 @@ public class TinyPounderMainUI extends UI {
     } else {
       poundingSlider.setCaption("POUNDING HARD");
     }
+  }
+
+
+  private void displayWarningNotification(String caption) {
+    Notification notification = new Notification(caption,
+        Notification.Type.TRAY_NOTIFICATION);
+    notification.setStyleName("warning");
+    notification.show(Page.getCurrent());
   }
 
   private void displayErrorNotification(String caption, String message) {
@@ -1191,10 +1305,7 @@ public class TinyPounderMainUI extends UI {
         cacheManagerBusiness.destroy();
         refreshCacheControls();
         refreshCacheManagerControls();
-        Notification notification = new Notification("CacheManager destroyed with success !",
-            Notification.Type.TRAY_NOTIFICATION);
-        notification.setStyleName("warning");
-        notification.show(Page.getCurrent());
+        displayWarningNotification("CacheManager destroyed with success !");
       } catch (Exception e) {
         displayErrorNotification("CacheManager could not be destroyed!", ExceptionUtils.getRootCauseMessage(e));
       }
@@ -1232,7 +1343,7 @@ public class TinyPounderMainUI extends UI {
   private void addKitControls() {
 
     kitControlsLayout = new VerticalLayout();
-    kitPathLayout = new GridLayout(2, 1);
+    kitPathLayout = new GridLayout(1, 1);
     kitPathLayout.setWidth(100, Unit.PERCENTAGE);
     kitPathLayout.setColumnExpandRatio(0, 2);
 
@@ -1246,13 +1357,7 @@ public class TinyPounderMainUI extends UI {
     kitPath.setPlaceholder("Kit location");
     kitPath.setWidth("100%");
     kitPath.setValue(settings.getKitPath() != null ? settings.getKitPath() : "");
-    kitPathBT = new Button("Update kit path");
-    kitPathBT.setEnabled(false);
-    kitPath.addValueChangeListener(event -> kitPathBT.setEnabled(true));
-    kitPathLayout.addComponent(kitPath);
-    kitPathLayout.addComponent(kitPathBT);
-
-    kitPathBT.addClickListener(event -> {
+    kitPath.addValueChangeListener(event -> {
       try {
         kitAwareClassLoaderDelegator.setKitPath(kitPath.getValue());
         info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise" : "Open source") + " Kit");
@@ -1267,27 +1372,18 @@ public class TinyPounderMainUI extends UI {
         initVoltronControlLayout();
         initRuntimeLayout();
         updateServerGrid();
+        displayWarningNotification("Kit location updated with success !");
       } catch (Exception e) {
-        if (e instanceof NoSuchFileException) {
+        if (e.getCause() instanceof NoSuchFileException) {
           displayErrorNotification("Kit path could not update !", "Make sure the path points to a kit !");
         } else {
           displayErrorNotification("Kit path could not update !", ExceptionUtils.getRootCauseMessage(e));
         }
-
       }
     });
-
+    kitPathLayout.addComponent(kitPath);
     kitControlsLayout.addComponent(info);
     kitControlsLayout.addComponent(kitPathLayout);
-
-    Button exitBT = new Button("Close TinyPounder");
-    exitBT.addClickListener(event -> new Thread(() -> {
-      runningServers.values().forEach(RunningServer::stop);
-      consoleRefresher.cancel(true);
-      SpringApplication.exit(appContext);
-    }).start());
-    kitControlsLayout.addComponent(exitBT);
-
     mainLayout.addTab(kitControlsLayout, "STEP 1: KIT");
   }
 
@@ -1413,10 +1509,7 @@ public class TinyPounderMainUI extends UI {
         datasetNames.add(datasetNameField.getValue());
         refreshDatasetStuff(listDataProvider);
         datasetNameField.clear();
-        Notification notification = new Notification("Dataset added with success !",
-            Notification.Type.TRAY_NOTIFICATION);
-        notification.setStyleName("warning");
-        notification.show(Page.getCurrent());
+        displayWarningNotification("Dataset added with success !");
       } catch (RuntimeException e) {
         displayErrorNotification("Dataset could not be added !", ExceptionUtils.getRootCauseMessage(e));
       }
@@ -1431,10 +1524,7 @@ public class TinyPounderMainUI extends UI {
         try {
           String datasetInstanceName = datasetManagerBusiness.createDatasetInstance(datasetName);
           refreshDatasetStuff(listDataProvider);
-          Notification notification = new Notification("Dataset instance " + datasetInstanceName + " created  with success !",
-              Notification.Type.TRAY_NOTIFICATION);
-          notification.setStyleName("warning");
-          notification.show(Page.getCurrent());
+          displayWarningNotification("Dataset instance " + datasetInstanceName + " created  with success !");
         } catch (Exception e) {
           displayErrorNotification("Dataset instance could not be created !", ExceptionUtils.getRootCauseMessage(e));
           refreshDatasetStuff(listDataProvider);
@@ -1447,10 +1537,7 @@ public class TinyPounderMainUI extends UI {
           datasetManagerBusiness.destroyDataset(datasetName);
           datasetNames.remove(datasetName);
           refreshDatasetStuff(listDataProvider);
-          Notification notification = new Notification("Dataset destroyed with success !",
-              Notification.Type.TRAY_NOTIFICATION);
-          notification.setStyleName("warning");
-          notification.show(Page.getCurrent());
+          displayWarningNotification("Dataset destroyed with success !");
         } catch (Exception e) {
           displayErrorNotification("Dataset could not be destroyed !", ExceptionUtils.getRootCauseMessage(e));
           refreshDatasetStuff(listDataProvider);
@@ -1473,10 +1560,7 @@ public class TinyPounderMainUI extends UI {
           try {
             datasetManagerBusiness.closeDatasetInstance(datasetName, instanceName);
             refreshDatasetStuff(listDataProvider);
-            Notification notification = new Notification("Dataset instance closed with success !",
-                Notification.Type.TRAY_NOTIFICATION);
-            notification.setStyleName("warning");
-            notification.show(Page.getCurrent());
+            displayWarningNotification("Dataset instance closed with success !");
           } catch (Exception e) {
             displayErrorNotification("Dataset instance could not be closed !", ExceptionUtils.getRootCauseMessage(e));
             refreshDatasetStuff(listDataProvider);

@@ -106,3 +106,21 @@ textarea.console {
   /*display: inline-block !important;*/
   padding-right: 10px !important;
 }
+
+td.v-tabsheet-tabitemcell-tab-absolute-right {
+  position: absolute;
+  right: 0px;
+}
+
+.v-tabsheet-tabs {
+  width: 100%;
+}
+
+.v-slot-delete {
+  width: 20% !important;
+  top: 18px;
+}
+
+.v-slot-base {
+  width: 80% !important;
+}
