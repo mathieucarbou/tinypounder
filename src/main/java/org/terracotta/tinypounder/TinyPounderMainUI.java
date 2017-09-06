@@ -200,11 +200,11 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void initRuntimeLayout() {
-    if (datasetLayout == null && cacheLayout == null
-        && (kitAwareClassLoaderDelegator.containsTerracottaStore() || kitAwareClassLoaderDelegator.containsEhcache())) {
+    if (mainLayout.getTab(runtimeLayout) == null) {
       runtimeLayout = new VerticalLayout();
       mainLayout.addTab(runtimeLayout, "STEP 4: DATASETS & CACHES");
-
+    }
+    if (kitAwareClassLoaderDelegator.containsTerracottaStore() || kitAwareClassLoaderDelegator.containsEhcache()) {
       initCacheLayout();
       initDatasetLayout();
     }
@@ -216,6 +216,10 @@ public class TinyPounderMainUI extends UI {
       datasetLayout.addStyleName("dataset-layout");
       runtimeLayout.addComponentsAndExpand(datasetLayout);
       addDatasetManagerControls();
+    } else if (!kitAwareClassLoaderDelegator.containsTerracottaStore() && datasetLayout != null) {
+      // kit does no longer contain tc store libs; clear the datasetLayout
+      runtimeLayout.removeComponent(datasetLayout);
+      datasetLayout = null;
     }
   }
 
@@ -225,6 +229,10 @@ public class TinyPounderMainUI extends UI {
       cacheLayout.addStyleName("cache-layout");
       runtimeLayout.addComponentsAndExpand(cacheLayout);
       addCacheManagerControls();
+    } else if (!kitAwareClassLoaderDelegator.containsEhcache() && cacheLayout != null) {
+      // kit does no longer contain ehcache libs; clear the cacheLayout
+      runtimeLayout.removeComponent(cacheLayout);
+      cacheLayout = null;
     }
   }
 
