@@ -333,7 +333,10 @@ public class TinyPounderMainUI extends UI {
     File workDir = new File(settings.getKitPath());
     LinkedBlockingQueue<String> consoleLines = new LinkedBlockingQueue<>(); // no limit, get all the output
     String script = new File(workDir, "tools/cluster-tool/bin/cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
-    String configs = tcConfigLocationPerStripe.values().stream().map(File::getAbsolutePath).collect(Collectors.joining(" "));
+    String configs = tcConfigLocationPerStripe.values()
+        .stream()
+        .sorted() // keep ordering so that stripe idx does not change
+        .map(File::getAbsolutePath).collect(Collectors.joining(" "));
     List<String> hostPortList = getHostPortList();
 
     switch (command) {
