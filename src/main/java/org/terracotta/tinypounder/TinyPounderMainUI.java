@@ -23,6 +23,7 @@ import com.vaadin.data.HasValue;
 import com.vaadin.data.provider.ListDataProvider;
 import com.vaadin.server.Page;
 import com.vaadin.server.VaadinRequest;
+import com.vaadin.server.VaadinSession;
 import com.vaadin.spring.annotation.SpringUI;
 import com.vaadin.ui.AbstractComponent;
 import com.vaadin.ui.Button;
@@ -139,6 +140,8 @@ public class TinyPounderMainUI extends UI {
 
   @Override
   protected void init(VaadinRequest vaadinRequest) {
+    VaadinSession.getCurrent().getSession().setMaxInactiveInterval(-1);
+
     setupLayout();
     addKitControls();
     updateKitControls();
