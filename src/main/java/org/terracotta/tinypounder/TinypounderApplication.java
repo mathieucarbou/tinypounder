@@ -23,7 +23,7 @@ import org.springframework.context.annotation.Configuration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackageClasses = TinypounderApplication.class)
 @Configuration
 public class TinypounderApplication {
 
