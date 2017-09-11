@@ -5,6 +5,7 @@
 
 package org.terracotta.tinypounder;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.stereotype.Component;
@@ -18,10 +19,13 @@ public class ApplicationReadyListener implements ApplicationListener<Application
 
   private static final boolean IS_MAC = System.getProperty("os.name", "unknown").toLowerCase().contains("mac");
 
+  @Value("${server.port}")
+  private int port;
+  
   @SuppressWarnings("unchecked")
   @Override
   public void onApplicationEvent(ApplicationReadyEvent event) {
-    URI uri = URI.create("http://localhost:9490/");
+    URI uri = URI.create("http://localhost:" + port);
     if (Desktop.isDesktopSupported()) {
       Desktop desktop = Desktop.getDesktop();
       if (desktop.isSupported(Desktop.Action.BROWSE)) {
