@@ -646,6 +646,7 @@ public class TinyPounderMainUI extends UI {
 
       serverGrid = new GridLayout(MIN_SERVER_GRID_COLS, nStripes + 1);
       serverGrid.setWidth(100, Unit.PERCENTAGE);
+      serverGrid.addStyleName("server-grid");
 
       stripes = new Slider(nStripes + " stripes", 1, ee ? 4 : 1);
       stripes.setValue((double) nStripes);

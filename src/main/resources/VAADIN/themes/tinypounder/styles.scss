@@ -40,20 +40,20 @@ $v-layout-margin-bottom: 16px;
 }
 
 .cache-layout {
-  background-color: aquamarine;
+  border: 1px solid black;
 }
 
 .dataset-layout {
-  background-color: beige;
+  border: 1px solid black;
 }
 
-.voltron-config-layout {
+/*.voltron-config-layout {
   background-color: #c8bde2;
-}
+}*/
 
-.voltron-control-layout {
+/*.voltron-control-layout {
   background-color: #e299a8;
-}
+}*/
 
 .v-slot-shift-bottom-right-offheap {
   top: 28px;
@@ -123,4 +123,12 @@ td.v-tabsheet-tabitemcell-tab-absolute-right {
 
 .v-slot-base {
   width: 80% !important;
+}
+
+.v-tabsheet-tabitem-selected .v-caption {
+  border-style: outset;
+}
+
+.v-slot-server-grid table tr:nth-child(4n) td {
+  border-bottom: 1px solid black;
 }
