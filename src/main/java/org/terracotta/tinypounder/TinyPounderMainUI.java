@@ -552,7 +552,6 @@ public class TinyPounderMainUI extends UI {
           Files.walk(rootPath, FileVisitOption.FOLLOW_LINKS)
               .sorted(Comparator.reverseOrder())
               .map(Path::toFile)
-              .peek(System.out::println)
               .forEach(File::delete);
           displayWarningNotification("Folder deleted with success");
           changeTrashButtonStatus(baseLocation.getValue());

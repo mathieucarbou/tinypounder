@@ -72,7 +72,6 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
     Files.walk(rootPath, FileVisitOption.FOLLOW_LINKS)
         .sorted(Comparator.reverseOrder())
         .map(Path::toFile)
-        .peek(System.out::println)
         .forEach(File::delete);
   }
 
