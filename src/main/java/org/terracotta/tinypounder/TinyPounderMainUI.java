@@ -18,7 +18,6 @@ package org.terracotta.tinypounder;
 import com.vaadin.annotations.PreserveOnRefresh;
 import com.vaadin.annotations.Push;
 import com.vaadin.annotations.Theme;
-import com.vaadin.annotations.Title;
 import com.vaadin.data.HasValue;
 import com.vaadin.data.provider.ListDataProvider;
 import com.vaadin.server.Page;
@@ -73,7 +72,6 @@ import java.util.stream.Collectors;
 /**
  * The UI class
  */
-@Title("Tiny Pounder")
 @Theme("tinypounder")
 @Push
 @SpringUI
@@ -83,6 +81,7 @@ public class TinyPounderMainUI extends UI {
   private static final int MIN_SERVER_GRID_COLS = 3;
   private static final int DATAROOT_PATH_COLUMN = 2;
   private static final File HOME = new File(System.getProperty("user.home"));
+  private static final String VERSION = getVersion();
 
   @Autowired
   private CacheManagerBusiness cacheManagerBusiness;
@@ -141,6 +140,7 @@ public class TinyPounderMainUI extends UI {
   @Override
   protected void init(VaadinRequest vaadinRequest) {
     VaadinSession.getCurrent().getSession().setMaxInactiveInterval(-1);
+    Page.getCurrent().setTitle("Tiny Pounder (" + VERSION + ")");
 
     setupLayout();
     addKitControls();
@@ -161,7 +161,7 @@ public class TinyPounderMainUI extends UI {
     VerticalLayout exitLayout = new VerticalLayout();
     exitLayout.addComponentsAndExpand(new Label("We hope you had fun using the TinyPounder, it is now shutdown, " +
         "as well as all the DatasetManagers, CacheManagers, and Terracotta servers you started with it"));
-    TabSheet.Tab tab = mainLayout.addTab(exitLayout, "EXIT : Close TinyPounder");
+    TabSheet.Tab tab = mainLayout.addTab(exitLayout, "EXIT : Close TinyPounder " + VERSION);
     tab.setStyleName("tab-absolute-right");
     mainLayout.addSelectedTabChangeListener(tabEvent -> {
       if (tabEvent.getTabSheet().getSelectedTab().equals(tab.getComponent())) {
@@ -1680,6 +1680,15 @@ public class TinyPounderMainUI extends UI {
     public final String getMinimizedValueAsHTML() {
       return "CacheManager full configuration";
     }
+  }
+
+  private static String getVersion() {
+    Package p = TinyPounderMainUI.class.getPackage();
+    if (p == null) {
+      return "dev";
+    }
+    String v = p.getImplementationVersion();
+    return v == null ? "dev" : v;
   }
 
 
