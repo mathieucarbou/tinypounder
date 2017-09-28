@@ -274,21 +274,21 @@ public class TinyPounderMainUI extends UI {
     serverControls.setWidth(50, Unit.PERCENTAGE);
     voltronControlLayout.addComponentsAndExpand(serverControls);
 
+    Button clusterStartBtn = new Button();
+    clusterStartBtn.setCaption("Start all servers");
+    clusterStartBtn.addStyleName("align-bottom");
+    clusterStartBtn.addClickListener(event -> {
+      for (Component child : serverControls) {
+        if (child instanceof Button && "START".equals(child.getCaption()) && child.isEnabled()) {
+          ((Button) child).click();
+        }
+      }
+    });
+
     if (kitAwareClassLoaderDelegator.isEEKit()) {
       clusterNameTF = new TextField();
       clusterNameTF.setCaption("Cluster name");
       clusterNameTF.setValue("MyCluster");
-
-      Button clusterStartBtn = new Button();
-      clusterStartBtn.setCaption("Start all servers");
-      clusterStartBtn.addStyleName("align-bottom");
-      clusterStartBtn.addClickListener(event -> {
-        for (Component child : serverControls) {
-          if (child instanceof Button && "START".equals(child.getCaption()) && child.isEnabled()) {
-            ((Button) child).click();
-          }
-        }
-      });
 
       Button clusterConfigBtn = new Button();
       clusterConfigBtn.addStyleName("align-bottom");
