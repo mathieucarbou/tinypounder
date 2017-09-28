@@ -239,11 +239,16 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
         cacheManagerPersistenceConfiguration = null;
       }
       Object cacheManager;
+      Object defaultManagementRegistryConfiguration;
+      try {
+        defaultManagementRegistryConfiguration = constructDefaultManagementRegistryConfiguration(cmName);
+      } catch (Exception e) {
+        defaultManagementRegistryConfiguration = null;
+      }
       if (kitAwareClassLoaderDelegator.isEEKit()) {
-        Object defaultManagementRegistryConfiguration = constructDefaultManagementRegistryConfiguration(cmName);
         cacheManager = constructCacheManagerBuilder(clusteringServiceConfigurationBuilder, cacheManagerPersistenceConfiguration, defaultManagementRegistryConfiguration);
       } else {
-        cacheManager = constructCacheManagerBuilder(clusteringServiceConfigurationBuilder, cacheManagerPersistenceConfiguration, null);
+        cacheManager = constructCacheManagerBuilder(clusteringServiceConfigurationBuilder, cacheManagerPersistenceConfiguration, defaultManagementRegistryConfiguration);
       }
       ehCacheManagerClass = loadClass("org.ehcache.core.EhcacheManager");
       Method initMethod = ehCacheManagerClass.getMethod("init");

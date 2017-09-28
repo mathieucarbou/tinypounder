@@ -273,9 +273,9 @@ public class TinyPounderMainUI extends UI {
     serverControls = new GridLayout();
     serverControls.setWidth(50, Unit.PERCENTAGE);
     voltronControlLayout.addComponentsAndExpand(serverControls);
-    
+
     HorizontalLayout row1 = new HorizontalLayout();
-    
+
     Button clusterStartBtn = new Button();
     clusterStartBtn.setCaption("Start all servers");
     clusterStartBtn.addStyleName("align-bottom");
@@ -325,9 +325,9 @@ public class TinyPounderMainUI extends UI {
 
       row1.addComponents(clusterNameTF, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn);
     }
-    
+
     voltronControlLayout.addComponentsAndExpand(row1);
-    
+
     consoles = new TabSheet();
     mainConsole = addConsole("Main", "main");
     voltronControlLayout.addComponentsAndExpand(consoles);
@@ -558,7 +558,7 @@ public class TinyPounderMainUI extends UI {
           displayWarningNotification("Folder deleted with success");
           changeTrashButtonStatus(baseLocation.getValue());
         } catch (IOException e) {
-          displayErrorNotification("Could not delete the folder", ExceptionUtils.getRootCauseMessage(e));
+          displayErrorNotification("Could not delete the folder", e);
         }
       } else {
         displayErrorNotification("Could not delete the folder", "Either folder does not exist or does not have logs/ nor data/ in it");
@@ -1113,7 +1113,7 @@ public class TinyPounderMainUI extends UI {
         cacheNameField.clear();
         displayWarningNotification("Cache added with success !");
       } catch (RuntimeException e) {
-        displayErrorNotification("Cache could not be added !", ExceptionUtils.getRootCauseMessage(e));
+        displayErrorNotification("Cache could not be added !", e);
       }
     });
 
@@ -1145,7 +1145,7 @@ public class TinyPounderMainUI extends UI {
           refreshCacheStuff(listDataProvider);
           displayWarningNotification("Cache removed with success !");
         } catch (RuntimeException e) {
-          displayErrorNotification("Cache could not be removed !", ExceptionUtils.getRootCauseMessage(e));
+          displayErrorNotification("Cache could not be removed !", e);
           refreshCacheStuff(listDataProvider);
         }
       });
@@ -1158,7 +1158,7 @@ public class TinyPounderMainUI extends UI {
           refreshCacheStuff(listDataProvider);
           displayWarningNotification("Cache destroyed with success !");
         } catch (Exception e) {
-          displayErrorNotification("Cache could not be destroyed !", ExceptionUtils.getRootCauseMessage(e));
+          displayErrorNotification("Cache could not be destroyed !", e);
           refreshCacheStuff(listDataProvider);
         }
       });
@@ -1187,6 +1187,11 @@ public class TinyPounderMainUI extends UI {
         Notification.Type.TRAY_NOTIFICATION);
     notification.setStyleName("warning");
     notification.show(Page.getCurrent());
+  }
+
+  private void displayErrorNotification(String caption, Throwable e) {
+    e.printStackTrace();
+    displayErrorNotification(caption, ExceptionUtils.getRootCauseMessage(e));
   }
 
   private void displayErrorNotification(String caption, String message) {
@@ -1293,7 +1298,7 @@ public class TinyPounderMainUI extends UI {
         cacheManagerConfigTextArea.setValue(cacheManagerBusiness.retrieveHumanReadableConfiguration());
         refreshCacheManagerControls();
       } catch (Exception e) {
-        displayErrorNotification("CacheManager could not be initialized!", ExceptionUtils.getRootCauseMessage(e));
+        displayErrorNotification("CacheManager could not be initialized!", e);
       }
     });
 
@@ -1304,7 +1309,7 @@ public class TinyPounderMainUI extends UI {
         refreshCacheControls();
         refreshCacheManagerControls();
       } catch (Exception e) {
-        displayErrorNotification("CacheManager could not be closed!", ExceptionUtils.getRootCauseMessage(e));
+        displayErrorNotification("CacheManager could not be closed!", e);
       }
     });
     Button destroyCacheManager = new Button("Destroy CacheManager");
@@ -1315,7 +1320,7 @@ public class TinyPounderMainUI extends UI {
         refreshCacheManagerControls();
         displayWarningNotification("CacheManager destroyed with success !");
       } catch (Exception e) {
-        displayErrorNotification("CacheManager could not be destroyed!", ExceptionUtils.getRootCauseMessage(e));
+        displayErrorNotification("CacheManager could not be destroyed!", e);
       }
     });
 
@@ -1385,7 +1390,7 @@ public class TinyPounderMainUI extends UI {
         if (e.getCause() instanceof NoSuchFileException) {
           displayErrorNotification("Kit path could not update !", "Make sure the path points to a kit !");
         } else {
-          displayErrorNotification("Kit path could not update !", ExceptionUtils.getRootCauseMessage(e));
+          displayErrorNotification("Kit path could not update !", e);
         }
       }
     });
@@ -1428,7 +1433,7 @@ public class TinyPounderMainUI extends UI {
         datasetManagerBusiness.initializeDatasetManager(!clusteredCheckBox.getValue() ? null : terracottaUrlField.getValue());
         refreshDatasetManagerControls();
       } catch (Exception e) {
-        displayErrorNotification("DatasetManager could not be initialized!", ExceptionUtils.getRootCauseMessage(e));
+        displayErrorNotification("DatasetManager could not be initialized!", e);
       }
     });
 
@@ -1439,7 +1444,7 @@ public class TinyPounderMainUI extends UI {
         refreshDatasetControls();
         refreshDatasetManagerControls();
       } catch (Exception e) {
-        displayErrorNotification("DatasetManager could not be closed!", ExceptionUtils.getRootCauseMessage(e));
+        displayErrorNotification("DatasetManager could not be closed!", e);
       }
     });
 
@@ -1519,7 +1524,7 @@ public class TinyPounderMainUI extends UI {
         datasetNameField.clear();
         displayWarningNotification("Dataset added with success !");
       } catch (RuntimeException e) {
-        displayErrorNotification("Dataset could not be added !", ExceptionUtils.getRootCauseMessage(e));
+        displayErrorNotification("Dataset could not be added !", e);
       }
     });
 
@@ -1534,7 +1539,7 @@ public class TinyPounderMainUI extends UI {
           refreshDatasetStuff(listDataProvider);
           displayWarningNotification("Dataset instance " + datasetInstanceName + " created  with success !");
         } catch (Exception e) {
-          displayErrorNotification("Dataset instance could not be created !", ExceptionUtils.getRootCauseMessage(e));
+          displayErrorNotification("Dataset instance could not be created !", e);
           refreshDatasetStuff(listDataProvider);
         }
       });
@@ -1547,7 +1552,7 @@ public class TinyPounderMainUI extends UI {
           refreshDatasetStuff(listDataProvider);
           displayWarningNotification("Dataset destroyed with success !");
         } catch (Exception e) {
-          displayErrorNotification("Dataset could not be destroyed !", ExceptionUtils.getRootCauseMessage(e));
+          displayErrorNotification("Dataset could not be destroyed !", e);
           refreshDatasetStuff(listDataProvider);
         }
       });
@@ -1570,7 +1575,7 @@ public class TinyPounderMainUI extends UI {
             refreshDatasetStuff(listDataProvider);
             displayWarningNotification("Dataset instance closed with success !");
           } catch (Exception e) {
-            displayErrorNotification("Dataset instance could not be closed !", ExceptionUtils.getRootCauseMessage(e));
+            displayErrorNotification("Dataset instance could not be closed !", e);
             refreshDatasetStuff(listDataProvider);
           }
         });
