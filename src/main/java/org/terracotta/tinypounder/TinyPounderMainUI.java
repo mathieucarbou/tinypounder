@@ -273,7 +273,9 @@ public class TinyPounderMainUI extends UI {
     serverControls = new GridLayout();
     serverControls.setWidth(50, Unit.PERCENTAGE);
     voltronControlLayout.addComponentsAndExpand(serverControls);
-
+    
+    HorizontalLayout row1 = new HorizontalLayout();
+    
     Button clusterStartBtn = new Button();
     clusterStartBtn.setCaption("Start all servers");
     clusterStartBtn.addStyleName("align-bottom");
@@ -284,6 +286,7 @@ public class TinyPounderMainUI extends UI {
         }
       }
     });
+    row1.addComponents(clusterStartBtn);
 
     if (kitAwareClassLoaderDelegator.isEEKit()) {
       clusterNameTF = new TextField();
@@ -320,12 +323,11 @@ public class TinyPounderMainUI extends UI {
       clusterStopBtn.setData("stop");
       clusterStopBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
-      HorizontalLayout row1 = new HorizontalLayout();
-      row1.addComponents(clusterNameTF, clusterStartBtn, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn);
-
-      voltronControlLayout.addComponentsAndExpand(row1);
+      row1.addComponents(clusterNameTF, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn);
     }
-
+    
+    voltronControlLayout.addComponentsAndExpand(row1);
+    
     consoles = new TabSheet();
     mainConsole = addConsole("Main", "main");
     voltronControlLayout.addComponentsAndExpand(consoles);
