@@ -483,7 +483,7 @@ public class TinyPounderMainUI extends UI {
   private void startServer(String stripeName, String serverName, Button startBT, Button stopBT, Label stateLBL, Label pidLBL) {
     File stripeconfig = tcConfigLocationPerStripe.get(stripeName);
     if (stripeconfig == null) {
-      generateXML();
+      generateXML(false);
       stripeconfig = tcConfigLocationPerStripe.get(stripeName);
     }
 
@@ -688,7 +688,7 @@ public class TinyPounderMainUI extends UI {
       generateTcConfig.addStyleName("align-bottom");
       generateTcConfig.setWidth(100, Unit.PERCENTAGE);
       generateTcConfig.addClickListener((Button.ClickListener) event -> {
-        generateXML();
+        generateXML(true);
         List<String> filenames = tcConfigLocationPerStripe.values().stream().map(File::getName).collect(Collectors.toList());
         Notification.show("Configurations saved:", "Location: " + settings.getKitPath() + "\nFiles: " + filenames, Notification.Type.HUMANIZED_MESSAGE);
       });
@@ -721,7 +721,7 @@ public class TinyPounderMainUI extends UI {
     }
   }
 
-  private void generateXML() {
+  private void generateXML(boolean skipConfirmOverwrite) {
     boolean ee = kitAwareClassLoaderDelegator.isEEKit();
 
     tcConfigLocationPerStripe.clear();
@@ -848,19 +848,28 @@ public class TinyPounderMainUI extends UI {
       sb.append("  </servers>\n\n" +
           "</tc-config>");
 
-      String xml = sb.toString();
-
-      tcConfigXml.setValue(tcConfigXml.getValue() + xml + "\n\n");
-
       String filename = "tc-config-stripe-" + stripeRow + ".xml";
       File location = new File(settings.getKitPath(), filename);
       tcConfigLocationPerStripe.put("stripe-" + stripeRow, location);
 
-      try {
-        Files.write(location.toPath(), xml.getBytes("UTF-8"));
-      } catch (IOException e) {
-        throw new UncheckedIOException(e);
+      String xml;
+      if (location.exists() && !skipConfirmOverwrite) {
+        Notification.show("Config already found: " + location.getName());
+        try {
+          xml = new String(Files.readAllBytes(location.toPath()), "UTF-8");
+        } catch (IOException e) {
+          throw new UncheckedIOException(e);
+        }
+      } else {
+        xml = sb.toString();
+        try {
+          Files.write(location.toPath(), xml.getBytes("UTF-8"));
+        } catch (IOException e) {
+          throw new UncheckedIOException(e);
+        }
       }
+
+      tcConfigXml.setValue(tcConfigXml.getValue() + xml + "\n\n");
     }
   }
 
