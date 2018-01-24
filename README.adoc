@@ -16,7 +16,12 @@ java -jar tinypounderXXX.jar
 
 If you usually run the TinyPounder with the same kit, you can provide its path at start time :
 ----
-java -jar tinypounderXXX.jar --kit.path=/path/to/unzipped/kit/
+java -jar tinypounderXXX.jar --kitPath=/path/to/unzipped/kit/ --licensePath=/path/to/license.xml
+----
+
+Disable auto-launch browser (when you already have a tinyPounder window)
+----
+java -jar tinypounderXXX.jar --autoLaunchBrowser=false
 ----
 
 Then head to http://localhost:8080

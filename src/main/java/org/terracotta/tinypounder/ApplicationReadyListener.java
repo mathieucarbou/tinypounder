@@ -21,10 +21,14 @@ public class ApplicationReadyListener implements ApplicationListener<Application
 
   @Value("${server.port}")
   private int port;
+
+  @Value("${autoLaunchBrowser}")
+  private Boolean autoLaunch;
   
   @SuppressWarnings("unchecked")
   @Override
   public void onApplicationEvent(ApplicationReadyEvent event) {
+    if (!autoLaunch) return;
     URI uri = URI.create("http://localhost:" + port);
     if (Desktop.isDesktopSupported()) {
       Desktop desktop = Desktop.getDesktop();
