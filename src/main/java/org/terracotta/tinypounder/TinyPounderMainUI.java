@@ -1489,9 +1489,18 @@ public class TinyPounderMainUI extends UI {
     datasetNameField.setPlaceholder("dataset name");
     datasetNameField.addStyleName("align-bottom");
 
+    List<String> keyTypeValues = Arrays.asList("STRING", "INT", "LONG", "DOUBLE", "BOOL", "CHAR");
+    ComboBox<String> keyTypeComboBox = new ComboBox<>("Key type", keyTypeValues);
+    keyTypeComboBox.setStyleName("datasetAttribute");
+    keyTypeComboBox.setEmptySelectionAllowed(false);
+    keyTypeComboBox.setTextInputAllowed(false);
+    keyTypeComboBox.setValue(keyTypeValues.get(0));
+
+    HorizontalLayout offHeapOption = new HorizontalLayout();
+    offHeapOption.setStyleName("datasetAttribute");
     TextField offHeapPersistenceLocationField = new TextField();
     CheckBox offHeapCheckBox = new CheckBox("offheap", true);
-    offHeapCheckBox.addStyleName("shift-bottom-right-offheap");
+    offHeapCheckBox.addStyleName("bottom");
     offHeapCheckBox.addValueChangeListener(valueChangeEvent -> {
       if (valueChangeEvent.getValue()) {
         offHeapPersistenceLocationField.setEnabled(true);
@@ -1501,11 +1510,13 @@ public class TinyPounderMainUI extends UI {
     });
     offHeapPersistenceLocationField.setCaption("offheap resource name");
     offHeapPersistenceLocationField.setValue("offheap-1");
+    offHeapOption.addComponents(offHeapCheckBox, offHeapPersistenceLocationField);
 
-
+    HorizontalLayout diskOption = new HorizontalLayout();
+    diskOption.setStyleName("datasetAttribute");
     TextField diskPersistenceLocationField = new TextField();
     CheckBox diskCheckBox = new CheckBox("disk", true);
-    diskCheckBox.addStyleName("shift-bottom-right-disk");
+    diskCheckBox.addStyleName("bottom");
     diskCheckBox.addValueChangeListener(valueChangeEvent -> {
       if (valueChangeEvent.getValue()) {
         diskPersistenceLocationField.setEnabled(true);
@@ -1515,18 +1526,20 @@ public class TinyPounderMainUI extends UI {
     });
     diskPersistenceLocationField.setCaption("disk resource name");
     diskPersistenceLocationField.setValue("dataroot-1");
+    diskOption.addComponents(diskCheckBox, diskPersistenceLocationField);
 
     CheckBox indexCheckBox = new CheckBox("use index", true);
-    indexCheckBox.addStyleName("shift-bottom-right-index");
+    indexCheckBox.setStyleName("datasetAttribute");
+    indexCheckBox.addStyleName("bottom");
 
     Button addDatasetButton = new Button("Add dataset");
-    addDatasetButton.addStyleName("align-bottom");
+    addDatasetButton.setStyleName("datasetAttribute");
 
-    datasetCreation.addComponentsAndExpand(datasetNameField, offHeapCheckBox, offHeapPersistenceLocationField, diskCheckBox, diskPersistenceLocationField, indexCheckBox, addDatasetButton);
+    datasetCreation.addComponents(datasetNameField, keyTypeComboBox, offHeapOption, diskOption, indexCheckBox, addDatasetButton);
     ListDataProvider<String> listDataProvider = new ListDataProvider<>(datasetNames);
     addDatasetButton.addClickListener(clickEvent -> {
       try {
-        DatasetConfiguration datasetConfiguration = new DatasetConfiguration(offHeapCheckBox.getValue() ? offHeapPersistenceLocationField.getValue() : null, diskCheckBox.getValue() ? diskPersistenceLocationField.getValue() : null, indexCheckBox.getValue());
+        DatasetConfiguration datasetConfiguration = new DatasetConfiguration(keyTypeComboBox.getValue(), offHeapCheckBox.getValue() ? offHeapPersistenceLocationField.getValue() : null, diskCheckBox.getValue() ? diskPersistenceLocationField.getValue() : null, indexCheckBox.getValue());
         datasetManagerBusiness.createDataset(datasetNameField.getValue(), datasetConfiguration);
         datasetNames.add(datasetNameField.getValue());
         refreshDatasetStuff(listDataProvider);
@@ -1574,10 +1587,40 @@ public class TinyPounderMainUI extends UI {
       if (datasetInstanceNames.size() > 0) {
         destroyDatasetButton.setEnabled(false);
       }
+      int count = 0;
       for (String instanceName : datasetInstanceNames) {
         HorizontalLayout datasetInstanceInfoLayout = new HorizontalLayout();
+        if ((count++) % 2 == 0) {
+          datasetInstanceInfoLayout.setStyleName("greyBackground");
+        }
         Label datasetInstanceNameLabel = new Label(instanceName);
+        datasetInstanceNameLabel.setStyleName("instance");
+
+        TextField newCellField = new TextField();
+        newCellField.setPlaceholder("myCellName:STRING");
+        newCellField.setStyleName("instance");
+        Button addCellButton = new Button("Add cell");
+        addCellButton.setStyleName("instance");
+        addCellButton.addClickListener(event -> {
+          try {
+            datasetManagerBusiness.addCustomCell(newCellField.getValue());
+            displayWarningNotification("New cell is added.");
+          } catch (Exception e) {
+            displayErrorNotification("New cell cannot be added.", e);
+          }
+        });
+        Button removeCellButton = new Button("Remove cell");
+        removeCellButton.setStyleName("instance");
+        removeCellButton.addClickListener(event -> {
+          try {
+            datasetManagerBusiness.removeCustomCell(newCellField.getValue());
+            displayWarningNotification("New cell is removed.");
+          } catch (Exception e) {
+            displayErrorNotification("New cell cannot be removed.", e);
+          }
+        });
         Button closeDatasetButton = new Button("Close dataset instance");
+        closeDatasetButton.setStyleName("instance");
         closeDatasetButton.addClickListener(event -> {
           try {
             datasetManagerBusiness.closeDatasetInstance(datasetName, instanceName);
@@ -1605,7 +1648,7 @@ public class TinyPounderMainUI extends UI {
         });
 
 
-        datasetInstanceInfoLayout.addComponentsAndExpand(datasetInstanceNameLabel, poundingSlider, closeDatasetButton);
+        datasetInstanceInfoLayout.addComponentsAndExpand(datasetInstanceNameLabel, newCellField, addCellButton, removeCellButton, poundingSlider, closeDatasetButton);
         datasetListLayout.addComponent(datasetInstanceInfoLayout);
       }
 

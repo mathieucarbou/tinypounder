@@ -9,16 +9,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.net.URI;
-import java.util.Collection;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,8 +30,8 @@ public class DatasetManagerBusinessReflectionImpl {
   private Random random = new Random();
   private Object stringCellDefinition;
   private Class<?> cellDefinitionClass;
-  private Object typeString;
   private Class<?> typeClass;
+  private Set<String> customCells = (new ConcurrentHashMap<>()).newKeySet();
 
   @Autowired
   public DatasetManagerBusinessReflectionImpl(KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator, ScheduledExecutorService poundingScheduler) throws Exception {
@@ -58,11 +50,11 @@ public class DatasetManagerBusinessReflectionImpl {
 
   private void pound(Object datasetInstance, Integer intensity) {
     IntStream.range(0, intensity).forEach(value -> {
-      insert(datasetInstance, Long.toString(ThreadLocalRandom.current().nextLong(0, intensity * 1000)), longString(intensity));
-      update(datasetInstance, Long.toString(ThreadLocalRandom.current().nextLong(0, intensity * 1000)), longString(intensity));
-      delete(datasetInstance, Long.toString(ThreadLocalRandom.current().nextLong(0, intensity * 1000)));
+      insert(datasetInstance, ThreadLocalRandom.current().nextLong(0, intensity * 1000), intensity);
+      update(datasetInstance, ThreadLocalRandom.current().nextLong(0, intensity * 1000), intensity);
+      delete(datasetInstance, ThreadLocalRandom.current().nextLong(0, intensity * 1000));
       stream(datasetInstance);
-      retrieve(datasetInstance, Long.toString(ThreadLocalRandom.current().nextLong(0, intensity * 1000)));
+      retrieve(datasetInstance, ThreadLocalRandom.current().nextLong(0, intensity * 1000));
     });
     try {
       generateRandomFailure(datasetInstance);
@@ -75,10 +67,10 @@ public class DatasetManagerBusinessReflectionImpl {
     int nextInt = ThreadLocalRandom.current().nextInt(0, 5);
     switch (nextInt) {
       case 0:
-        insert(datasetInstance, null, longString(0));
+        insert(datasetInstance, null, 0);
         break;
       case 1:
-        update(datasetInstance, null, longString(0));
+        update(datasetInstance, null, 0);
         break;
       case 2:
         retrieve(datasetInstance, null);
@@ -155,19 +147,19 @@ public class DatasetManagerBusinessReflectionImpl {
     }
   }
 
-  private void delete(Object datasetInstance, String key) {
+  private void delete(Object datasetInstance, Long key) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       Object datasetWriterReader = retrieveDatasetWriterReader(datasetInstance);
       Class<?> datasetWriterReaderClass = loadClass("com.terracottatech.store.DatasetWriterReader");
       Method deleteMethod = datasetWriterReaderClass.getMethod("delete", Comparable.class);
-      deleteMethod.invoke(datasetWriterReader, key);
+      deleteMethod.invoke(datasetWriterReader, longToKeyType(getKeyTypeJDK(datasetInstance), key));
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
-  private void update(Object datasetInstance, String key, String value) {
+  private void update(Object datasetInstance, Long key, Integer value) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       Object datasetWriterReader = retrieveDatasetWriterReader(datasetInstance);
@@ -175,23 +167,23 @@ public class DatasetManagerBusinessReflectionImpl {
 
       Class<?> updateOperationClass = loadClass("com.terracottatech.store.UpdateOperation");
       Method writeMethod = updateOperationClass.getMethod("write", cellDefinitionClass, Object.class);
-      Object writeOperation = writeMethod.invoke(null, stringCellDefinition, value);
+      Object writeOperation = writeMethod.invoke(null, stringCellDefinition, longString(value));
 
       Method updateMethod = datasetWriterReaderClass.getMethod("update", Comparable.class, updateOperationClass);
 
-      updateMethod.invoke(datasetWriterReader, key, writeOperation);
+      updateMethod.invoke(datasetWriterReader, longToKeyType(getKeyTypeJDK(datasetInstance), key), writeOperation);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
-  private void retrieve(Object datasetInstance, String key) {
+  private void retrieve(Object datasetInstance, Long key) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       Object datasetWriterReader = retrieveDatasetWriterReader(datasetInstance);
       Class<?> datasetWriterReaderClass = loadClass("com.terracottatech.store.DatasetWriterReader");
       Method getMethod = datasetWriterReaderClass.getMethod("get", Comparable.class);
-      getMethod.invoke(datasetWriterReader, key);
+      getMethod.invoke(datasetWriterReader, longToKeyType(getKeyTypeJDK(datasetInstance), key));
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -199,63 +191,84 @@ public class DatasetManagerBusinessReflectionImpl {
 
   private Object retrieveDatasetWriterReader(Object datasetInstance) throws Exception {
     Class<?> internalDatasetClass = loadClass("com.terracottatech.store.internal.InternalDataset");
-
-
-    Class<?> readVisibilityClas = loadClass("com.terracottatech.store.setting.ReadVisibility");
-    Class<?> readSettingsClass = loadClass("com.terracottatech.store.setting.ReadSettings");
-
-    Class<?> writeVisibilityClas = loadClass("com.terracottatech.store.setting.WriteVisibility");
-    Class<?> writeSettingsClass = loadClass("com.terracottatech.store.setting.WriteSettings");
-
-
-    Field definitiveField = readVisibilityClas.getDeclaredField("DEFINITIVE");
-    Object definitiveReadVisibility = definitiveField.get(null);
-    Method asReadSettingsMethod = readVisibilityClas.getMethod("asReadSettings");
-    Object definitiveReadVisibilityAsReadSettings = asReadSettingsMethod.invoke(definitiveReadVisibility);
-
-
-    Field immediateField = writeVisibilityClas.getDeclaredField("IMMEDIATE");
-    Object immediateWriteVisibility = immediateField.get(null);
-    Method asWriteSettingsMethod = writeVisibilityClas.getMethod("asWriteSettings");
-    Object immediateWriteVisibilityAsWriteSettings = asWriteSettingsMethod.invoke(immediateWriteVisibility);
-
-    Method writerReader = internalDatasetClass.getMethod("writerReader", readSettingsClass, writeSettingsClass);
-
-    return writerReader.invoke(datasetInstance, definitiveReadVisibilityAsReadSettings, immediateWriteVisibilityAsWriteSettings);
+    Method writerReader = internalDatasetClass.getMethod("writerReader");
+    return writerReader.invoke(datasetInstance);
   }
 
-  private void insert(Object datasetInstance, String key, String value) {
+  private Object retrieveDatasetReader(Object datasetInstance) throws Exception {
+    Class<?> internalDatasetClass = loadClass("com.terracottatech.store.internal.InternalDataset");
+    Method reader = internalDatasetClass.getMethod("reader");
+    return reader.invoke(datasetInstance);
+  }
+
+  private Object longToKeyType(Class keyTypeJDK, Long internalKey) {
+    Object key;
+    if (keyTypeJDK.equals(String.class)) {
+      key = Long.toString(internalKey);
+    } else if (keyTypeJDK.equals(Integer.class)) {
+      key = internalKey.intValue();
+    } else if (keyTypeJDK.equals(Long.class)) {
+      key = internalKey;
+    } else if (keyTypeJDK.equals(Double.class)) {
+      key = internalKey.doubleValue();
+    } else if (keyTypeJDK.equals(Boolean.class)) {
+      key = internalKey % 2 == 0;
+    } else if (keyTypeJDK.equals(Character.class)) {
+      key = Long.toString(internalKey).charAt(0);
+    } else {
+      key = null;
+    }
+    return key;
+  }
+
+  private Class<?> getKeyTypeJDK(Object datasetInstance) throws Exception {
+    Class<?> datasetReaderClass = loadClass("com.terracottatech.store.DatasetReader");
+    Method getKeyTypeMethod = datasetReaderClass.getMethod("getKeyType");
+    Object datasetReader = retrieveDatasetReader(datasetInstance);
+    Object keyType = getKeyTypeMethod.invoke(datasetReader);
+    Method getJDKTypeMethod = typeClass.getDeclaredMethod("getJDKType");
+    return (Class<?>) getJDKTypeMethod.invoke(keyType);
+  }
+
+  private void insert(Object datasetInstance, Long key, Integer value) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       Object datasetWriterReader = retrieveDatasetWriterReader(datasetInstance);
-
       Class<?> datasetWriterReaderClass = loadClass("com.terracottatech.store.DatasetWriterReader");
 
       Class<?> cellClass = loadClass("com.terracottatech.store.Cell");
       Class cellClasses = Array.newInstance(cellClass, 0).getClass();
       Method addMethod = datasetWriterReaderClass.getMethod("add", Comparable.class, cellClasses);
 
-      Object[] cells;
-      if (key == null || Long.parseLong(key) % 2 == 0) {
-        cells = generateOneCell(value, cellClass);
+      Object[] generatedCells;
+      if (key == null || key % 2 == 0) {
+        generatedCells = generateOneCell(value, cellClass);
       } else {
-        cells = generateTwoCells(value, cellClass);
+        generatedCells = generateTwoCells(value, cellClass);
       }
-
-      addMethod.invoke(datasetWriterReader, key, cells);
-
+      Object[] customCells = generateCustomCells(value);
+      Object[] cells = (Object[]) Array.newInstance(cellClass, generatedCells.length + customCells.length);
+      int i = 0;
+      for (Object c : generatedCells) {
+        cells[i++] = c;
+      }
+      for (Object c : customCells) {
+        cells[i++] = c;
+      }
+      addMethod.invoke(datasetWriterReader, longToKeyType(getKeyTypeJDK(datasetInstance), key), cells);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
-  private Object[] generateTwoCells(String value, Class<?> cellClass) throws Exception {
+  private Object[] generateTwoCells(Integer value, Class<?> cellClass) throws Exception {
+    String valueStr = longString(value);
     Method newCellMethod = cellDefinitionClass.getMethod("newCell", Object.class);
-    Object stringCellValue = newCellMethod.invoke(stringCellDefinition, value);
+    Object stringCellValue = newCellMethod.invoke(stringCellDefinition, valueStr);
 
     Method defineBytesMethod = cellDefinitionClass.getMethod("defineBytes", String.class);
     Object bytesCellDefinition = defineBytesMethod.invoke(null, "myBytesCell");
-    Object bytesCellValue = newCellMethod.invoke(bytesCellDefinition, value.getBytes());
+    Object bytesCellValue = newCellMethod.invoke(bytesCellDefinition, valueStr.getBytes());
 
     Object[] cells = (Object[]) Array.newInstance(cellClass, 2);
     cells[0] = stringCellValue;
@@ -263,16 +276,83 @@ public class DatasetManagerBusinessReflectionImpl {
     return cells;
   }
 
-  private Object[] generateOneCell(String value, Class<?> cellClass) throws Exception {
+  private Object[] generateOneCell(Integer value, Class<?> cellClass) throws Exception {
+    String valueStr = longString(value);
     Class<?> cellDefinitionClass = loadClass("com.terracottatech.store.definition.CellDefinition");
     Method newCellMethod = cellDefinitionClass.getMethod("newCell", Object.class);
     Method defineBytesMethod = cellDefinitionClass.getMethod("defineBytes", String.class);
     Object bytesCellDefinition = defineBytesMethod.invoke(null, "myBytesCell");
-    Object bytesCellValue = newCellMethod.invoke(bytesCellDefinition, value.getBytes());
+    Object bytesCellValue = newCellMethod.invoke(bytesCellDefinition, valueStr.getBytes());
 
     Object[] cells = (Object[]) Array.newInstance(cellClass, 1);
     cells[0] = bytesCellValue;
     return cells;
+  }
+
+  private Object[] generateCustomCells(Integer value) throws Exception {
+    String valueStr = longString(value);
+    Method newCellMethod = cellDefinitionClass.getMethod("newCell", Object.class);
+    List<Object> cells = new ArrayList<>();
+    for (String customCellStr : customCells) {
+      String[] splitted = customCellStr.split(":");
+      String cellName = splitted[0];
+      String cellType = splitted[1];
+      switch(cellType) {
+        case "STRING":
+          Object stringCellDefinition = cellDefinitionClass
+            .getMethod("defineString", String.class).invoke(null, cellName);
+          cells.add(newCellMethod.invoke(stringCellDefinition, valueStr));
+          break;
+        case "INT":
+          Object intCellDefinition = cellDefinitionClass
+            .getMethod("defineInt", String.class).invoke(null, cellName);
+          cells.add(newCellMethod.invoke(intCellDefinition, ThreadLocalRandom.current().nextInt(0, value * 1000)));
+          break;
+        case "LONG":
+          Object longCellDefinition = cellDefinitionClass
+            .getMethod("defineLong", String.class).invoke(null, cellName);
+          cells.add(newCellMethod.invoke(longCellDefinition, ThreadLocalRandom.current().nextLong(0, value * 1000)));
+          break;
+        case "DOUBLE":
+          Object doubleCellDefinition = cellDefinitionClass
+            .getMethod("defineDouble", String.class).invoke(null, cellName);
+          cells.add(newCellMethod.invoke(doubleCellDefinition, ThreadLocalRandom.current().nextDouble(0, value * 1000)));
+          break;
+        case "BOOL":
+          Object boolCellDefinition = cellDefinitionClass
+            .getMethod("defineBool", String.class).invoke(null, cellName);
+          cells.add(newCellMethod.invoke(boolCellDefinition, ThreadLocalRandom.current().nextInt(0, value * 1000) % 2 == 0));
+          break;
+        case "CHAR":
+          Object charCellDefinition = cellDefinitionClass
+            .getMethod("defineChar", String.class).invoke(null, cellName);
+          cells.add(newCellMethod.invoke(charCellDefinition, valueStr.charAt(0)));
+          break;
+        case "BYTES":
+          Object bytesCellDefinition = cellDefinitionClass
+            .getMethod("defineBytes", String.class).invoke(null, cellName);
+          cells.add(newCellMethod.invoke(bytesCellDefinition, valueStr.getBytes()));
+          break;
+        default:
+          throw new RuntimeException("Cannot recognize cell type: " + cellType);
+      }
+    }
+    return cells.toArray();
+  }
+
+  public void addCustomCell(String cellStr) {
+    String[] splitted = cellStr.split(":");
+    if (splitted.length == 2) {
+      String cellType = splitted[1];
+      Set<String> TYPES = new HashSet<>(Arrays.asList("STRING", "INT", "LONG", "DOUBLE", "BOOL", "CHAR", "BYTES"));
+      if (TYPES.contains(cellType)) {
+        customCells.add(cellStr);
+      }
+    }
+  }
+
+  public void removeCustomCell(String cellStr) {
+    customCells.remove(cellStr);
   }
 
   private String longString(Integer intensity) {
@@ -334,8 +414,6 @@ public class DatasetManagerBusinessReflectionImpl {
 
   private void initCommonObjectsAndClasses() throws Exception {
     typeClass = loadClass("com.terracottatech.store.Type");
-    Field typeStringField = typeClass.getDeclaredField("STRING");
-    typeString = typeStringField.get(null);
 
     cellDefinitionClass = loadClass("com.terracottatech.store.definition.CellDefinition");
     Method defineStringMethod = cellDefinitionClass.getMethod("defineString", String.class);
@@ -403,7 +481,7 @@ public class DatasetManagerBusinessReflectionImpl {
       Object datasetConfigurationBuilt = buildMethod.invoke(datasetConfigurationBuilder);
 
       Method createDatasetMethod = datasetManagerClass.getMethod("createDataset", String.class, typeClass, datasetConfigurationClass);
-      Object datasetInstance = createDatasetMethod.invoke(datasetManager, datasetName, typeString, datasetConfigurationBuilt);
+      Object datasetInstance = createDatasetMethod.invoke(datasetManager, datasetName, toKeyType(datasetConfiguration.getKeyType()), datasetConfigurationBuilt);
 
       String instanceName = getInstanceName(datasetInstance);
       Map<String, Object> instancesByName = new TreeMap<>();
@@ -412,6 +490,10 @@ public class DatasetManagerBusinessReflectionImpl {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
+  }
+
+  private Object toKeyType(String keyTypeStr) throws ClassNotFoundException, NoSuchFieldException, IllegalAccessException {
+    return loadClass("com.terracottatech.store.Type").getDeclaredField(keyTypeStr).get(null);
   }
 
   private String getInstanceName(Object datasetInstance) throws ClassNotFoundException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
@@ -478,9 +560,10 @@ public class DatasetManagerBusinessReflectionImpl {
   public String createDatasetInstance(String datasetName) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
-
+      Method listDatasetsMethod = datasetManagerClass.getMethod("listDatasets");
+      Map<String, Object> datasetsByName = (Map<String, Object>) listDatasetsMethod.invoke(datasetManager);
       Method getDatasetMethod = datasetManagerClass.getMethod("getDataset", String.class, typeClass);
-      Object datasetInstance = getDatasetMethod.invoke(datasetManager, datasetName, typeString);
+      Object datasetInstance = getDatasetMethod.invoke(datasetManager, datasetName, datasetsByName.get(datasetName));
       String instanceName = getInstanceName(datasetInstance);
 
       datasetInstancesByDatasetName.computeIfAbsent(datasetName, k -> new TreeMap<>());
