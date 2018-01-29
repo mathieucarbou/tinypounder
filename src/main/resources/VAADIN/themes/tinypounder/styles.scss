@@ -57,17 +57,42 @@ $v-layout-margin-bottom: 16px;
 
 .v-slot-shift-bottom-right-offheap {
   top: 28px;
-  left: 8%;
+  left: 5em;
 }
 
 .v-slot-shift-bottom-right-disk {
   top: 28px;
-  left: 10%;
+  left: 5em;
 }
 
 .v-slot-shift-bottom-right-index {
   top: 28px;
-  left: 6%;
+  left: 2em;
+}
+
+.v-slot-datasetAttribute {
+  margin-left: 3em;
+}
+
+.v-checkbox-bottom {
+  top: 2em;
+}
+
+.v-button-datasetAttribute {
+  top: 1em;
+}
+
+.v-label-instance {
+  margin-top: .5em;
+  margin-left: 1em;
+}
+
+.v-slot-greyBackground {
+  background-color: #EAEAEA;
+}
+
+.v-slot-instance {
+  top: .7em;
 }
 
 .tc-config-xml {
