@@ -9,8 +9,20 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.net.URI;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -480,13 +492,21 @@ public class DatasetManagerBusinessReflectionImpl {
 
       Object datasetConfigurationBuilt = buildMethod.invoke(datasetConfigurationBuilder);
 
-      Method createDatasetMethod = datasetManagerClass.getMethod("createDataset", String.class, typeClass, datasetConfigurationClass);
-      Object datasetInstance = createDatasetMethod.invoke(datasetManager, datasetName, toKeyType(datasetConfiguration.getKeyType()), datasetConfigurationBuilt);
+      Method createDatasetMethod;
+      try {
+        createDatasetMethod = datasetManagerClass.getMethod("createDataset", String.class, typeClass, datasetConfigurationClass);
+        Object datasetInstance = createDatasetMethod.invoke(datasetManager, datasetName, toKeyType(datasetConfiguration.getKeyType()), datasetConfigurationBuilt);
+        String instanceName = getInstanceName(datasetInstance);
+        Map<String, Object> instancesByName = new TreeMap<>();
+        instancesByName.put(instanceName, datasetInstance);
+        datasetInstancesByDatasetName.put(datasetName, instancesByName);
+      } catch (NoSuchMethodException e) {
+        // use new api
+        createDatasetMethod = datasetManagerClass.getMethod("newDataset", String.class, typeClass, datasetConfigurationClass);
+        boolean datasetCreated = (boolean) createDatasetMethod.invoke(datasetManager, datasetName, toKeyType(datasetConfiguration.getKeyType()), datasetConfigurationBuilt);
+        createDatasetInstance(datasetName);
+      }
 
-      String instanceName = getInstanceName(datasetInstance);
-      Map<String, Object> instancesByName = new TreeMap<>();
-      instancesByName.put(instanceName, datasetInstance);
-      datasetInstancesByDatasetName.put(datasetName, instancesByName);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
