@@ -178,8 +178,8 @@ public class DatasetManagerBusinessReflectionImpl {
       Class<?> datasetWriterReaderClass = loadClass("com.terracottatech.store.DatasetWriterReader");
 
       Class<?> updateOperationClass = loadClass("com.terracottatech.store.UpdateOperation");
-      Method writeMethod = updateOperationClass.getMethod("write", cellDefinitionClass, Object.class);
-      Object writeOperation = writeMethod.invoke(null, stringCellDefinition, longString(value));
+      Method writeMethod = updateOperationClass.getMethod("write", String.class, Object.class);
+      Object writeOperation = writeMethod.invoke(null, "myStringCell", longString(value));
 
       Method updateMethod = datasetWriterReaderClass.getMethod("update", Comparable.class, updateOperationClass);
 
