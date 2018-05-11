@@ -72,6 +72,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
   private void pound(Object cache, Integer intensity) {
     IntStream.range(0, intensity).forEach(value -> {
       put(cache, ThreadLocalRandom.current().nextLong(0, intensity * 1000), longString(intensity));
+      remove(cache, ThreadLocalRandom.current().nextLong(0, intensity * 100));
       IntStream.range(0, 3).forEach(getIterationValue -> get(cache, ThreadLocalRandom.current().nextLong(0, intensity * 1000)));
     });
   }
@@ -95,6 +96,16 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       Class<?> cacheClass = loadClass("org.ehcache.core.Ehcache");
       Method putCacheMethod = cacheClass.getMethod("put", Object.class, Object.class);
       putCacheMethod.invoke(cache, key, value);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private void remove(Object cache, long key) {
+    try {
+      Class<?> cacheClass = loadClass("org.ehcache.core.Ehcache");
+      Method removeCacheMethod = cacheClass.getMethod("remove", Object.class);
+      removeCacheMethod.invoke(cache, key);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
