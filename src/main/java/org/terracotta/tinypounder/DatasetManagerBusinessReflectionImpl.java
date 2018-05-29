@@ -48,7 +48,7 @@ public class DatasetManagerBusinessReflectionImpl {
   @Autowired
   public DatasetManagerBusinessReflectionImpl(KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator, ScheduledExecutorService poundingScheduler) throws Exception {
     this.kitAwareClassLoaderDelegator = kitAwareClassLoaderDelegator;
-    poundingScheduler.scheduleAtFixedRate(() -> poundingMap.entrySet().parallelStream().forEach(entryConsumer -> {
+    poundingScheduler.scheduleWithFixedDelay(() -> poundingMap.entrySet().parallelStream().forEach(entryConsumer -> {
       try {
         Object datasetInstance = retrieveDatasetInstance(entryConsumer.getKey());
         if (datasetInstance != null && entryConsumer.getValue() > 0) {
@@ -57,7 +57,7 @@ public class DatasetManagerBusinessReflectionImpl {
       } catch (Exception e) {
         e.printStackTrace();
       }
-    }), 5000, 100, TimeUnit.MILLISECONDS);
+    }), 1000, 100, TimeUnit.MILLISECONDS);
   }
 
   private void pound(Object datasetInstance, Integer intensity) {
@@ -414,6 +414,13 @@ public class DatasetManagerBusinessReflectionImpl {
         Object clusteredDatasetManagerBuilder = clusteredMethod.invoke(null, clusterUri);
 
         Class<?> clusteredDatasetManagerBuilderClass = loadClass("com.terracottatech.store.client.builder.datasetmanager.clustered.ClusteredDatasetManagerBuilderImpl");
+
+        Method addTagsMethod = clusteredDatasetManagerBuilderClass.getMethod("withClientTags", String[].class);
+        clusteredDatasetManagerBuilder = addTagsMethod.invoke(clusteredDatasetManagerBuilder, (Object)new String[]{"tiny", "pounder", "client"});
+
+        Method aliasMethod = clusteredDatasetManagerBuilderClass.getMethod("withClientAlias", String.class);
+        clusteredDatasetManagerBuilder = aliasMethod.invoke(clusteredDatasetManagerBuilder, "TinyPounderDataset");
+
         Method buildMethod = clusteredDatasetManagerBuilderClass.getMethod("build");
         datasetManager = buildMethod.invoke(clusteredDatasetManagerBuilder);
       } else {
