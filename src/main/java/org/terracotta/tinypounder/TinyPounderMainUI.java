@@ -1032,7 +1032,7 @@ public class TinyPounderMainUI extends UI {
     cacheNameField.addStyleName("align-bottom");
     cacheCreation.addComponent(cacheNameField);
 
-    List<Long> onHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
+    List<Long> onHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L, 10_000L);
     ComboBox<Long> onHeapSizeComboBox = new ComboBox<>("OnHeap size", onHeapValues);
     onHeapSizeComboBox.addStyleName("small-combo");
     onHeapSizeComboBox.setTextInputAllowed(false);
@@ -1047,7 +1047,7 @@ public class TinyPounderMainUI extends UI {
     onHeapUnitComboBox.setTextInputAllowed(false);
     cacheCreation.addComponent(onHeapUnitComboBox);
 
-    List<Long> offHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
+    List<Long> offHeapValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L, 10_000L);
     ComboBox<Long> offHeapSizeComboBox = new ComboBox<>("Offheap size", offHeapValues);
     offHeapSizeComboBox.addStyleName("small-combo");
     offHeapSizeComboBox.setTextInputAllowed(false);
@@ -1063,7 +1063,7 @@ public class TinyPounderMainUI extends UI {
     offHeapUnitComboBox.setTextInputAllowed(false);
     cacheCreation.addComponent(offHeapUnitComboBox);
 
-    List<Long> diskValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L);
+    List<Long> diskValues = Arrays.asList(0L, 1L, 10L, 100L, 1000L, 10_000L);
     ComboBox<Long> diskSizeComboBox = new ComboBox<>("Disk size", diskValues);
     diskSizeComboBox.addStyleName("small-combo");
     diskSizeComboBox.setEmptySelectionAllowed(false);

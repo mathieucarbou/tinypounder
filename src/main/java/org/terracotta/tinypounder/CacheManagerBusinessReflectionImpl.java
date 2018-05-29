@@ -57,7 +57,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
   @Autowired
   public CacheManagerBusinessReflectionImpl(KitAwareClassLoaderDelegator kitAwareClassLoaderDelegator, ScheduledExecutorService poundingScheduler) throws Exception {
     this.kitAwareClassLoaderDelegator = kitAwareClassLoaderDelegator;
-    poundingScheduler.scheduleAtFixedRate(() -> poundingMap.entrySet().parallelStream().forEach(entryConsumer -> {
+    poundingScheduler.scheduleWithFixedDelay(() -> poundingMap.entrySet().parallelStream().forEach(entryConsumer -> {
       try {
         Object cache = getCache(entryConsumer.getKey());
         if (cache != null && entryConsumer.getValue() > 0) {
@@ -66,7 +66,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       } catch (Exception e) {
         e.printStackTrace();
       }
-    }), 5000, 100, TimeUnit.MILLISECONDS);
+    }), 1000, 100, TimeUnit.MILLISECONDS);
   }
 
   private void pound(Object cache, Integer intensity) {
