@@ -415,11 +415,15 @@ public class DatasetManagerBusinessReflectionImpl {
 
         Class<?> clusteredDatasetManagerBuilderClass = loadClass("com.terracottatech.store.client.builder.datasetmanager.clustered.ClusteredDatasetManagerBuilderImpl");
 
-        Method addTagsMethod = clusteredDatasetManagerBuilderClass.getMethod("withClientTags", String[].class);
-        clusteredDatasetManagerBuilder = addTagsMethod.invoke(clusteredDatasetManagerBuilder, (Object)new String[]{"tiny", "pounder", "client"});
+        try {
+          Method addTagsMethod = clusteredDatasetManagerBuilderClass.getMethod("withClientTags", String[].class);
+          clusteredDatasetManagerBuilder = addTagsMethod.invoke(clusteredDatasetManagerBuilder, (Object) new String[]{"tiny", "pounder", "client"});
 
-        Method aliasMethod = clusteredDatasetManagerBuilderClass.getMethod("withClientAlias", String.class);
-        clusteredDatasetManagerBuilder = aliasMethod.invoke(clusteredDatasetManagerBuilder, "TinyPounderDataset");
+          Method aliasMethod = clusteredDatasetManagerBuilderClass.getMethod("withClientAlias", String.class);
+          clusteredDatasetManagerBuilder = aliasMethod.invoke(clusteredDatasetManagerBuilder, "TinyPounderDataset");
+        } catch (Exception e) {
+          // catch and ignore to support earlier versions
+        }
 
         Method buildMethod = clusteredDatasetManagerBuilderClass.getMethod("build");
         datasetManager = buildMethod.invoke(clusteredDatasetManagerBuilder);
