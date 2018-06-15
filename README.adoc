@@ -38,3 +38,9 @@ and then start it with :
 java -jar target/tinypounderXXX.jar
 ----
 
+or, in a single step :
+
+---
+./mvnw clean spring-boot:run
+---
+

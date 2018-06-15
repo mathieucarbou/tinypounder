@@ -35,12 +35,14 @@ import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.Notification;
 import com.vaadin.ui.PopupView;
+import com.vaadin.ui.RadioButtonGroup;
 import com.vaadin.ui.Slider;
 import com.vaadin.ui.TabSheet;
 import com.vaadin.ui.TextArea;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.UI;
 import com.vaadin.ui.VerticalLayout;
+import com.vaadin.ui.themes.ValoTheme;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
@@ -82,6 +84,8 @@ public class TinyPounderMainUI extends UI {
   private static final int DATAROOT_PATH_COLUMN = 2;
   private static final File HOME = new File(System.getProperty("user.home"));
   private static final String VERSION = getVersion();
+  private static final String AVAILABILITY = "Availability";
+  private static final String CONSISTENCY = "Consistency";
 
   @Autowired
   private CacheManagerBusiness cacheManagerBusiness;
@@ -120,6 +124,7 @@ public class TinyPounderMainUI extends UI {
   private GridLayout serverGrid;
   private Slider reconnectWindow;
   private GridLayout dataRootGrid;
+  private GridLayout consistencyGrid;
   private Slider dataRoots;
   private CheckBox platformPersistence;
   private CheckBox platformBackup;
@@ -136,6 +141,8 @@ public class TinyPounderMainUI extends UI {
   private Button generateTcConfig;
   private TextField baseLocation;
   private Button trashDataButton;
+  private RadioButtonGroup<String> consistencyGroup;
+  private TextField votersCountTextField;
 
   @Override
   protected void init(VaadinRequest vaadinRequest) {
@@ -640,6 +647,44 @@ public class TinyPounderMainUI extends UI {
       platformPersistenceWanted(true);
 
       layout.addComponentsAndExpand(dataRootGrid);
+
+      //consistency and voters
+      consistencyGrid = new GridLayout(2, 1);
+      consistencyGroup = new RadioButtonGroup<>();
+      consistencyGroup.setItems(AVAILABILITY, CONSISTENCY);
+      consistencyGroup.setSelectedItem(AVAILABILITY);
+      consistencyGroup.addStyleName(ValoTheme.OPTIONGROUP_HORIZONTAL);
+
+
+      consistencyGrid.addComponent(consistencyGroup);
+      consistencyGroup.addStyleName("align-bottom");
+
+      FormLayout votersGroup = new FormLayout();
+      votersGroup.addStyleName("align-bottom3");
+      votersCountTextField = new TextField("Voters count");
+      votersCountTextField.setMaxLength(2);
+      votersCountTextField.setValue("2");
+
+      votersCountTextField.addValueChangeListener(event -> {
+        try {
+          Integer.parseInt(event.getValue());
+          votersCountTextField.setCaption("Voters count");
+        } catch (NumberFormatException e) {
+          votersCountTextField.setCaption("Voters count - MUST BE INTEGER");
+        }
+      });
+
+      votersGroup.addComponent(votersCountTextField);
+
+      consistencyGroup.addValueChangeListener(event -> {
+        if (event.getValue().equals(AVAILABILITY)) {
+          consistencyGrid.removeComponent(votersGroup);
+        } else {
+          consistencyGrid.addComponent(votersGroup, 1, 0);
+        }
+      });
+
+      layout.addComponentsAndExpand(consistencyGrid);
     }
 
     // stripe / server form
@@ -843,10 +888,19 @@ public class TinyPounderMainUI extends UI {
 
       // reconnect window
       sb.append("    <client-reconnect-window>" + reconnectWindow.getValue().intValue() + "</client-reconnect-window>\n\n");
+      sb.append("  </servers>\n\n");
+
+      if (consistencyGroup.isSelected(CONSISTENCY)) {
+        int votersCount = Integer.parseInt(votersCountTextField.getValue());
+        sb.append("  <failover-priority>\n" +
+            "    <consistency>\n" +
+            "      <voter count=\"" + votersCount + "\"/>\n" +
+            "    </consistency>\n" +
+            "  </failover-priority>\n\n");
+      }
 
       // ends XML
-      sb.append("  </servers>\n\n" +
-          "</tc-config>");
+      sb.append("</tc-config>");
 
       String filename = "tc-config-stripe-" + stripeRow + ".xml";
       File location = new File(settings.getKitPath(), filename);
