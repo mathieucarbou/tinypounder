@@ -44,6 +44,7 @@ public class ProcUtils {
         .workingDir(workDir)
         .redirectStderr()
         .pipeStdout(out)
+        .env("JAVA_OPTS", "-Dcom.terracottatech.tools.clustertool.timeout=10000")
         .build();
 
     Thread waiter = new Thread(() -> {
