@@ -35,12 +35,14 @@ import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.Notification;
 import com.vaadin.ui.PopupView;
+import com.vaadin.ui.RadioButtonGroup;
 import com.vaadin.ui.Slider;
 import com.vaadin.ui.TabSheet;
 import com.vaadin.ui.TextArea;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.UI;
 import com.vaadin.ui.VerticalLayout;
+import com.vaadin.ui.themes.ValoTheme;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
@@ -82,6 +84,8 @@ public class TinyPounderMainUI extends UI {
   private static final int DATAROOT_PATH_COLUMN = 2;
   private static final File HOME = new File(System.getProperty("user.home"));
   private static final String VERSION = getVersion();
+  private static final String AVAILABILITY = "Availability";
+  private static final String CONSISTENCY = "Consistency";
 
   @Autowired
   private CacheManagerBusiness cacheManagerBusiness;
@@ -120,6 +124,7 @@ public class TinyPounderMainUI extends UI {
   private GridLayout serverGrid;
   private Slider reconnectWindow;
   private GridLayout dataRootGrid;
+  private GridLayout consistencyGrid;
   private Slider dataRoots;
   private CheckBox platformPersistence;
   private CheckBox platformBackup;
@@ -136,6 +141,8 @@ public class TinyPounderMainUI extends UI {
   private Button generateTcConfig;
   private TextField baseLocation;
   private Button trashDataButton;
+  private RadioButtonGroup<String> consistencyGroup;
+  private TextField votersCountTextField;
 
   @Override
   protected void init(VaadinRequest vaadinRequest) {
@@ -317,13 +324,19 @@ public class TinyPounderMainUI extends UI {
       clusterDumpBtn.setData("dump");
       clusterDumpBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
+      Button clusterStatusBtn = new Button();
+      clusterStatusBtn.addStyleName("align-bottom");
+      clusterStatusBtn.setCaption("Status");
+      clusterStatusBtn.setData("status");
+      clusterStatusBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
+
       Button clusterStopBtn = new Button();
       clusterStopBtn.addStyleName("align-bottom");
       clusterStopBtn.setCaption("Stop cluster");
       clusterStopBtn.setData("stop");
       clusterStopBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
-      row1.addComponents(clusterNameTF, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn);
+      row1.addComponents(clusterNameTF, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn, clusterStatusBtn);
     }
 
     voltronControlLayout.addComponentsAndExpand(row1);
@@ -366,21 +379,39 @@ public class TinyPounderMainUI extends UI {
       }
 
       case "dump":
+      case "status":
       case "backup":
       case "stop": {
         ProcUtils.run(
             workDir,
-            script + " " + command + " -n " + clusterNameTF.getValue() + " " + hostPortList.get(0),
+            script + " " + command + " -n " + clusterNameTF.getValue() + " " + hostPortList.stream().collect(Collectors.joining(" ")),
             consoleLines,
             newLine -> access(() -> updateMainConsole(consoleLines)),
             () -> access(() -> consoles.setSelectedTab(mainConsole)));
         break;
       }
+      default:
+        // probably a serverName is coming in, so we want status for this server
+        String hostPort = getHostPortFromServerName(command);
+
+        ProcUtils.run(
+            workDir,
+            script + " status -s " + hostPort,
+            consoleLines,
+            newLine -> access(() -> updateMainConsole(consoleLines)),
+            () -> access(() -> consoles.setSelectedTab(mainConsole)));
+        break;
 
     }
 
     consoles.setSelectedTab(mainConsole);
     updateMainConsole(consoleLines);
+  }
+
+  private String getHostPortFromServerName(String serverName) {
+    List<String> serverNameList = getServerNameList();
+    List<String> hostPortList = getHostPortList();
+    return hostPortList.get(serverNameList.indexOf(serverName));
   }
 
   private void updateMainConsole(Queue<String> consoleLines) {
@@ -407,7 +438,7 @@ public class TinyPounderMainUI extends UI {
 
     serverControls.removeAllComponents();
     serverControls.setRows(nStripes * nServersPerStripe);
-    serverControls.setColumns(5);
+    serverControls.setColumns(6);
 
     for (int i = consoles.getComponentCount() - 1; i > 0; i--) {
       consoles.removeTab(consoles.getTab(i));
@@ -436,6 +467,13 @@ public class TinyPounderMainUI extends UI {
           stopBT.setData(serverName);
           serverControls.addComponent(stopBT);
 
+          Button statusBT = new Button();
+          statusBT.setEnabled(false);
+          statusBT.setCaption("STATUS");
+          statusBT.setStyleName("align-top");
+          statusBT.setData(serverName);
+          serverControls.addComponent(statusBT);
+
           Label pid = new Label();
           serverControls.addComponent(pid);
 
@@ -445,11 +483,12 @@ public class TinyPounderMainUI extends UI {
           addConsole(serverName, stripeName + "-" + serverName);
 
           startBT.addClickListener((Button.ClickListener) event -> {
-            startServer(stripeName, (String) event.getButton().getData(), startBT, stopBT, state, pid);
+            startServer(stripeName, (String) event.getButton().getData(), startBT, stopBT, statusBT, state, pid);
           });
           stopBT.addClickListener((Button.ClickListener) event -> {
-            stopServer(stripeName, (String) event.getButton().getData(), stopBT);
+            stopServer(stripeName, (String) event.getButton().getData(), stopBT, statusBT);
           });
+          statusBT.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
         }
       }
     }
@@ -471,16 +510,33 @@ public class TinyPounderMainUI extends UI {
     return servers;
   }
 
-  private void stopServer(String stripeName, String serverName, Button stopBT) {
+  private List<String> getServerNameList() {
+    int nStripes = serverGrid.getRows() - 1;
+    int nServersPerStripe = serverGrid.getColumns() - 1;
+    List<String> servers = new ArrayList<>(nStripes * nServersPerStripe);
+    for (int stripeId = 1; stripeId < serverGrid.getRows(); stripeId++) {
+      for (int serverId = 1; serverId < serverGrid.getColumns(); serverId++) {
+        FormLayout form = (FormLayout) serverGrid.getComponent(serverId, stripeId);
+        if (form != null) {
+          TextField serverName = (TextField) form.getComponent(0);
+          servers.add(serverName.getValue());
+        }
+      }
+    }
+    return servers;
+  }
+
+  private void stopServer(String stripeName, String serverName, Button stopBT, Button statusBT) {
     RunningServer runningServer = runningServers.get(stripeName + "-" + serverName);
     if (runningServer != null) {
       runningServer.stop();
       stopBT.setEnabled(false);
+      statusBT.setEnabled(false);
       runningServer.refreshConsole();
     }
   }
 
-  private void startServer(String stripeName, String serverName, Button startBT, Button stopBT, Label stateLBL, Label pidLBL) {
+  private void startServer(String stripeName, String serverName, Button startBT, Button stopBT, Button statusBT, Label stateLBL, Label pidLBL) {
     File stripeconfig = tcConfigLocationPerStripe.get(stripeName);
     if (stripeconfig == null) {
       generateXML(false);
@@ -497,6 +553,7 @@ public class TinyPounderMainUI extends UI {
           runningServers.remove(key);
           access(() -> {
             stopBT.setEnabled(false);
+            statusBT.setEnabled(false);
             startBT.setEnabled(true);
             pidLBL.setValue("");
             stateLBL.setValue("STOPPED");
@@ -516,6 +573,7 @@ public class TinyPounderMainUI extends UI {
     runningServer.start();
     startBT.setEnabled(false);
     stopBT.setEnabled(true);
+    statusBT.setEnabled(true);
     runningServer.refreshConsole();
   }
 
@@ -640,6 +698,44 @@ public class TinyPounderMainUI extends UI {
       platformPersistenceWanted(true);
 
       layout.addComponentsAndExpand(dataRootGrid);
+
+      //consistency and voters
+      consistencyGrid = new GridLayout(2, 1);
+      consistencyGroup = new RadioButtonGroup<>();
+      consistencyGroup.setItems(AVAILABILITY, CONSISTENCY);
+      consistencyGroup.setSelectedItem(AVAILABILITY);
+      consistencyGroup.addStyleName(ValoTheme.OPTIONGROUP_HORIZONTAL);
+
+
+      consistencyGrid.addComponent(consistencyGroup);
+      consistencyGroup.addStyleName("align-bottom");
+
+      FormLayout votersGroup = new FormLayout();
+      votersGroup.addStyleName("align-bottom3");
+      votersCountTextField = new TextField("Voters count");
+      votersCountTextField.setMaxLength(2);
+      votersCountTextField.setValue("2");
+
+      votersCountTextField.addValueChangeListener(event -> {
+        try {
+          Integer.parseInt(event.getValue());
+          votersCountTextField.setCaption("Voters count");
+        } catch (NumberFormatException e) {
+          votersCountTextField.setCaption("Voters count - MUST BE INTEGER");
+        }
+      });
+
+      votersGroup.addComponent(votersCountTextField);
+
+      consistencyGroup.addValueChangeListener(event -> {
+        if (event.getValue().equals(AVAILABILITY)) {
+          consistencyGrid.removeComponent(votersGroup);
+        } else {
+          consistencyGrid.addComponent(votersGroup, 1, 0);
+        }
+      });
+
+      layout.addComponentsAndExpand(consistencyGrid);
     }
 
     // stripe / server form
@@ -843,10 +939,19 @@ public class TinyPounderMainUI extends UI {
 
       // reconnect window
       sb.append("    <client-reconnect-window>" + reconnectWindow.getValue().intValue() + "</client-reconnect-window>\n\n");
+      sb.append("  </servers>\n\n");
+
+      if (consistencyGroup.isSelected(CONSISTENCY)) {
+        int votersCount = Integer.parseInt(votersCountTextField.getValue());
+        sb.append("  <failover-priority>\n" +
+            "    <consistency>\n" +
+            "      <voter count=\"" + votersCount + "\"/>\n" +
+            "    </consistency>\n" +
+            "  </failover-priority>\n\n");
+      }
 
       // ends XML
-      sb.append("  </servers>\n\n" +
-          "</tc-config>");
+      sb.append("</tc-config>");
 
       String filename = "tc-config-stripe-" + stripeRow + ".xml";
       File location = new File(settings.getKitPath(), filename);
