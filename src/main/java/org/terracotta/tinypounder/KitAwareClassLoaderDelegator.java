@@ -19,6 +19,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
+import javax.xml.bind.DatatypeConverter;
+import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -27,7 +29,9 @@ import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.stream.Stream;
+import java.security.MessageDigest;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Service
 public class KitAwareClassLoaderDelegator {
@@ -55,39 +59,52 @@ public class KitAwareClassLoaderDelegator {
   }
 
   private static URL[] discoverKitClientJars(String kitPath) throws Exception {
-    Stream<Path> clientEhcacheJarStream = null;
+    // this map helps avoiding errors like this one by avoiding putting duplicated jars in classpath:
+    // MULTIPLE instances of org.terracotta.lease.LeaseAcquirerClientService found, ignoring:file:/Users/mathieu/Downloads/terracotta-db-10.3.0-SNAPSHOT/client/lib/terracotta-common-client-10.3.0-SNAPSHOT.jar keeping:file:/Users/mathieu/Downloads/terracotta-db-10.3.0-SNAPSHOT/client/ehcache/terracotta-ehcache-client-10.3.0-SNAPSHOT.jar using classloader:java.net.FactoryURLClassLoader@6505414e
+    Map<String, File> libraries = new LinkedHashMap<>();
     try {
-      clientEhcacheJarStream = Files.walk(Paths.get(kitPath, "/client/ehcache"), 4, FileVisitOption.FOLLOW_LINKS)
-          .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
-    } catch (IOException e) {
+      Files.walk(Paths.get(kitPath, "/client/ehcache"), 4, FileVisitOption.FOLLOW_LINKS)
+          .map(Path::toFile)
+          .filter(file -> file.getName().endsWith(".jar"))
+          .forEach(file -> libraries.put(hash(file), file.getAbsoluteFile()));
+    } catch (Exception e) {
       // that's fine, it's probably just a kit without ehcache
     }
-    Stream<Path> clientStoreJarStream = null;
     try {
-      clientStoreJarStream = Files.walk(Paths.get(kitPath, "/client/store"), 4, FileVisitOption.FOLLOW_LINKS)
-          .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
+      Files.walk(Paths.get(kitPath, "/client/store"), 4, FileVisitOption.FOLLOW_LINKS)
+          .map(Path::toFile)
+          .filter(file -> file.getName().endsWith(".jar"))
+          .forEach(file -> libraries.put(hash(file), file.getAbsoluteFile()));
     } catch (IOException e) {
       // that's fine, it's probably just a kit without tc store
     }
-    Stream<Path> clientLibJarStream = Stream.empty();
     try {
-      clientLibJarStream = Files.walk(Paths.get(kitPath, "/client/lib"), 4, FileVisitOption.FOLLOW_LINKS)
-          .filter(path -> path.toFile().getAbsolutePath().endsWith("jar"));
+      Files.walk(Paths.get(kitPath, "/client/lib"), 4, FileVisitOption.FOLLOW_LINKS)
+          .map(Path::toFile)
+          .filter(file -> file.getName().endsWith(".jar"))
+          .forEach(file -> libraries.put(hash(file), file.getAbsoluteFile()));
     } catch (IOException e) {
       // it's possible that the client libs are elsewhere...
-      clientLibJarStream = Files.walk(Paths.get(kitPath, "../common/lib"), 4, FileVisitOption.FOLLOW_LINKS)
-          .filter(path -> path.toFile().getAbsolutePath().endsWith("-client.jar"));
+      Files.walk(Paths.get(kitPath, "../common/lib"), 4, FileVisitOption.FOLLOW_LINKS)
+          .map(Path::toFile)
+          .filter(file -> file.getName().endsWith("-client.jar"))
+          .forEach(file -> libraries.put(hash(file), file.getAbsoluteFile()));
     }
-    Stream<Path> concat = clientEhcacheJarStream != null ? Stream.concat(clientEhcacheJarStream, clientLibJarStream) : clientLibJarStream;
-    concat = clientStoreJarStream != null ? Stream.concat(concat, clientStoreJarStream) : concat;
-    return concat.map(path -> {
+    return libraries.values().stream().map(file -> {
       try {
-        return new URL("file:" + path.toFile().getAbsolutePath());
+        return file.toURI().toURL();
       } catch (MalformedURLException e) {
-        e.printStackTrace();
+        throw new AssertionError(e);
       }
-      return null;
     }).toArray(URL[]::new);
+  }
+
+  private static String hash(File file) {
+    try {
+      return DatatypeConverter.printHexBinary(MessageDigest.getInstance("MD5").digest(Files.readAllBytes(file.toPath())));
+    } catch (Exception e) {
+      return file.getName();
+    }
   }
 
   public boolean containsTerracottaStore() {
