@@ -373,6 +373,16 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
     Method newCacheConfigurationBuilderMethod = cacheConfigurationBuilderClass.getMethod("newCacheConfigurationBuilder", Class.class, Class.class, builderClass);
     Object resourcePoolsBuilder = defaultCacheConfigurationCacheResourcePoolBuilder(kitAwareClassLoaderDelegator.isEEKit(), cacheConfiguration);
     Object cacheConfigurationBuilder = newCacheConfigurationBuilderMethod.invoke(null, Long.class, String.class, resourcePoolsBuilder);
+
+    try {
+      Class<?> storeStatisticsConfigurationClass = loadClass("org.ehcache.core.config.store.StoreStatisticsConfiguration");
+      Object storeStatisticsConfiguration = storeStatisticsConfigurationClass.getConstructor(boolean.class).newInstance(true);
+      Method add = cacheConfigurationBuilderClass.getMethod("add", loadClass("org.ehcache.spi.service.ServiceConfiguration"));
+      add.invoke(cacheConfigurationBuilder, storeStatisticsConfiguration);
+    } catch (Exception e) {
+      System.out.println("Unable to call: add(new StoreStatisticsConfiguration(true))");
+    }
+
     Method buildMethod = cacheConfigurationBuilderClass.getMethod("build");
     return buildMethod.invoke(cacheConfigurationBuilder);
   }
