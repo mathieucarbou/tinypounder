@@ -29,6 +29,7 @@ import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Map;
@@ -207,6 +208,19 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
   }
 
   @Override
+  public void clearCache(String alias) {
+    try {
+      Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
+      Object cache = getCache(alias);
+      Class ehCacheClass = loadClass("org.ehcache.core.Ehcache");
+      Method clearCacheMethod = ehCacheClass.getMethod("clear");
+      clearCacheMethod.invoke(cache);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
   public String retrieveHumanReadableConfiguration() {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
@@ -256,11 +270,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       } catch (Exception e) {
         defaultManagementRegistryConfiguration = null;
       }
-      if (kitAwareClassLoaderDelegator.isEEKit()) {
-        cacheManager = constructCacheManagerBuilder(clusteringServiceConfigurationBuilder, cacheManagerPersistenceConfiguration, defaultManagementRegistryConfiguration);
-      } else {
-        cacheManager = constructCacheManagerBuilder(clusteringServiceConfigurationBuilder, cacheManagerPersistenceConfiguration, defaultManagementRegistryConfiguration);
-      }
+      cacheManager = constructCacheManagerBuilder(clusteringServiceConfigurationBuilder, cacheManagerPersistenceConfiguration, defaultManagementRegistryConfiguration);
       ehCacheManagerClass = loadClass("org.ehcache.core.EhcacheManager");
       Method initMethod = ehCacheManagerClass.getMethod("init");
       initMethod.invoke(cacheManager);
@@ -292,7 +302,9 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
     return cacheManagerPersistenceConfigurationConstructor.newInstance(tinyPounderDiskPersistenceLocationFolder);
   }
 
-  private Object constructCacheManagerBuilder(Object enterpriseClusteringServiceConfigurationBuilder, Object cacheManagerPersistenceConfiguration, Object defaultManagementRegistryConfiguration) throws ClassNotFoundException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+  private Object constructCacheManagerBuilder(Object enterpriseClusteringServiceConfigurationBuilder,
+                                              Object cacheManagerPersistenceConfiguration,
+                                              Object defaultManagementRegistryConfiguration) throws ClassNotFoundException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
     Class<?> cacheManagerBuilderClass = loadClass("org.ehcache.config.builders.CacheManagerBuilder");
     Method newCacheManagerBuilderMethod = cacheManagerBuilderClass.getMethod("newCacheManagerBuilder");
     Class<?> builderClass = loadClass("org.ehcache.config.Builder");
@@ -323,6 +335,16 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
     Method valueOfMethod = memoryUnitClass.getMethod("valueOf", String.class);
     Object mB = valueOfMethod.invoke(null, "MB");
 
+    Object timeoutsInstance = null;
+    Class<?> timeoutsClass = null;
+    try {
+      timeoutsClass = loadClass("org.ehcache.clustered.client.config.Timeouts");
+      Constructor timeoutsClassConstructor = timeoutsClass.getConstructor(new Class[]{Duration.class, Duration.class, Duration.class});
+      timeoutsInstance = timeoutsClassConstructor.newInstance(Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5));
+    } catch (Exception e) {
+      // nevermind, the api wrt timeouts is fairly recent, 3.5.x, so if running an old ehcache, we won't configure timeouts; oh well...
+    }
+
     if (eeKit) {
 
       Class<?> enterpriseServerSideConfigurationBuilderClass = loadClass("com.terracottatech.ehcache.clustered.client.config.builders.EnterpriseServerSideConfigurationBuilder");
@@ -339,6 +361,11 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
 
 
       Object enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve(clusterTierManagerName));
+      if (timeoutsClass != null && timeoutsInstance != null) {
+        Method timeoutsMethod = enterpriseClusteringServiceConfigurationBuilderClass.getMethod("timeouts", timeoutsClass);
+        enterpriseClusteringServiceConfigurationBuilder = timeoutsMethod.invoke(enterpriseClusteringServiceConfigurationBuilder, timeoutsInstance);
+      }
+
       Object enterpriseServerSideConfigurationBuilder = autoCreateMethod.invoke(enterpriseClusteringServiceConfigurationBuilder);
       enterpriseServerSideConfigurationBuilder = defaultServerResourceMethod.invoke(enterpriseServerSideConfigurationBuilder, defaultOffheapResource);
       enterpriseServerSideConfigurationBuilder = resourcePoolMethod4.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-a", 128L, mB, defaultOffheapResource);
@@ -348,7 +375,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
 
       Class<?> serverSideConfigurationBuilderClass = loadClass("org.ehcache.clustered.client.config.builders.ServerSideConfigurationBuilder");
       Class<?> clusteringServiceConfigurationBuilderClass = loadClass("org.ehcache.clustered.client.config.builders.ClusteringServiceConfigurationBuilder");
-      Method enterpriseClusterMethod = clusteringServiceConfigurationBuilderClass.getMethod("cluster", URI.class);
+      Method clusterMethod = clusteringServiceConfigurationBuilderClass.getMethod("cluster", URI.class);
 
       Method autoCreateMethod = clusteringServiceConfigurationBuilderClass.getMethod("autoCreate");
       Method defaultServerResourceMethod = serverSideConfigurationBuilderClass.getMethod("defaultServerResource", String.class);
@@ -356,12 +383,16 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       Method resourcePoolMethod3 = serverSideConfigurationBuilderClass.getMethod("resourcePool", String.class, long.class, memoryUnitClass);
 
 
-      Object enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve(clusterTierManagerName));
-      Object enterpriseServerSideConfigurationBuilder = autoCreateMethod.invoke(enterpriseClusteringServiceConfigurationBuilder);
-      enterpriseServerSideConfigurationBuilder = defaultServerResourceMethod.invoke(enterpriseServerSideConfigurationBuilder, defaultOffheapResource);
-      enterpriseServerSideConfigurationBuilder = resourcePoolMethod4.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-a", 128L, mB, defaultOffheapResource);
-      enterpriseServerSideConfigurationBuilder = resourcePoolMethod3.invoke(enterpriseServerSideConfigurationBuilder, "resource-pool-b", 64L, mB);
-      return enterpriseServerSideConfigurationBuilder;
+      Object clusteringServiceConfigurationBuilder = clusterMethod.invoke(null, clusterUri.resolve(clusterTierManagerName));
+      if (timeoutsClass != null && timeoutsInstance != null) {
+        Method timeoutsMethod = clusteringServiceConfigurationBuilderClass.getMethod("timeouts", timeoutsClass);
+        clusteringServiceConfigurationBuilder = timeoutsMethod.invoke(clusteringServiceConfigurationBuilder, timeoutsInstance);
+      }
+      Object serverSideConfigurationBuilder = autoCreateMethod.invoke(clusteringServiceConfigurationBuilder);
+      serverSideConfigurationBuilder = defaultServerResourceMethod.invoke(serverSideConfigurationBuilder, defaultOffheapResource);
+      serverSideConfigurationBuilder = resourcePoolMethod4.invoke(serverSideConfigurationBuilder, "resource-pool-a", 128L, mB, defaultOffheapResource);
+      serverSideConfigurationBuilder = resourcePoolMethod3.invoke(serverSideConfigurationBuilder, "resource-pool-b", 64L, mB);
+      return serverSideConfigurationBuilder;
     }
 
 

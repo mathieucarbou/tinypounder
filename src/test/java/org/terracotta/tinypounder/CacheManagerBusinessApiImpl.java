@@ -109,6 +109,11 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
   }
 
   @Override
+  public void clearCache(String alias) {
+    cacheManager.getCache(alias, Integer.class, String.class);
+  }
+
+  @Override
   public String retrieveHumanReadableConfiguration() {
     return ((HumanReadable) cacheManager.getRuntimeConfiguration()).readableString();
   }
@@ -116,7 +121,6 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
   @Override
   public void initializeCacheManager(String terracottaServerUrl, String cmName, String tinyPounderDiskPersistenceLocation, String defaultOffheapResource, String diskResource) {
     URI clusterUri = URI.create("terracotta://" + terracottaServerUrl + "/" + cmName);
-
 
     File tinyPounderDiskPersistenceLocationFolder = new File(tinyPounderDiskPersistenceLocation);
     if (tinyPounderDiskPersistenceLocationFolder.exists()) {
@@ -134,14 +138,9 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
                 .resourcePool("resource-pool-a", 128, MemoryUnit.MB, "offheap-2")
                 .resourcePool("resource-pool-b", 64, MemoryUnit.MB)
             ).with(new CacheManagerPersistenceConfiguration(tinyPounderDiskPersistenceLocationFolder))
-//            .using(new DefaultManagementRegistryConfiguration()
-//                .addTags("tiny", "pounder", "client")
-//                .setCacheManagerAlias(cmName)
-//            )
         ;
 
     Cache<Integer, String> cache = cacheManager.getCache(cmName, Integer.class, String.class);
-//cache.put();
     EhcacheManager cacheManager = (EhcacheManager) cacheManagerBuilder.build();
     cacheManager.init();
     this.cacheManager = cacheManager;

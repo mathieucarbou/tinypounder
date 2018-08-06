@@ -30,6 +30,8 @@ public interface CacheManagerBusiness {
 
   void removeCache(String alias);
 
+  void clearCache(String alias);
+
   String retrieveHumanReadableConfiguration();
 
   void initializeCacheManager(String terracottaServerUrl, String cmName, String tinyPounderDiskPersistenceLocation, String defaultOffheapResource, String diskResource);
