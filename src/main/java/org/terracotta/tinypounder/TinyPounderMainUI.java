@@ -1264,6 +1264,17 @@ public class TinyPounderMainUI extends UI {
         }
       });
 
+      Button clearCacheButton = new Button("Clear cache");
+      clearCacheButton.addClickListener(event -> {
+        try {
+          cacheManagerBusiness.clearCache(cacheName);
+          displayWarningNotification("Cache cleared with success !");
+        } catch (RuntimeException e) {
+          displayErrorNotification("Cache could not be cleared !", e);
+          refreshCacheStuff(listDataProvider);
+        }
+      });
+
       Button destroyCacheButton = new Button("Destroy cache");
       destroyCacheButton.addClickListener(event -> {
         try {
@@ -1276,7 +1287,7 @@ public class TinyPounderMainUI extends UI {
           refreshCacheStuff(listDataProvider);
         }
       });
-      cacheInfo.addComponentsAndExpand(cacheNameLabel, poundingSlider, removeCacheButton, destroyCacheButton);
+      cacheInfo.addComponentsAndExpand(cacheNameLabel, poundingSlider, clearCacheButton, removeCacheButton, destroyCacheButton);
       cacheList.addComponent(cacheInfo);
     }
 
