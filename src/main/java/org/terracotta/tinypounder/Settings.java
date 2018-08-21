@@ -23,6 +23,9 @@ public class Settings {
   @Value("${kitPath}")
   private String kitPath;
 
+  @Value("${securityPath}")
+  private String securityPath;
+
   @Value("${licensePath}")
   private String licensePath;
 
@@ -55,6 +58,16 @@ public class Settings {
       }
     }
     // always prefer system props over saved config
+    if (securityPath == null || securityPath.isEmpty()) {
+      securityPath = properties.getProperty("securityPath");
+      if (securityPath != null) {
+        File folder = new File(securityPath);
+        if (!folder.exists() || !folder.isDirectory()) {
+          securityPath = null;
+        }
+      }
+    }
+
     if (kitPath == null || kitPath.isEmpty()) {
       kitPath = properties.getProperty("kitPath");
       if(kitPath != null) {
@@ -111,6 +124,9 @@ public class Settings {
     if (kitPath != null) {
       properties.setProperty("kitPath", kitPath);
     }
+    if (securityPath != null) {
+      properties.setProperty("securityPath", securityPath);
+    }
     if (licensePath != null) {
       properties.setProperty("licensePath", licensePath);
     }
@@ -134,6 +150,14 @@ public class Settings {
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
+  }
+
+  public String getSecurityPath() {
+    return securityPath;
+  }
+
+  public void setSecurityPath(String securityPath) {
+    this.securityPath = securityPath;
   }
 
   public String getKitPath() {

@@ -86,6 +86,7 @@ public class TinyPounderMainUI extends UI {
   private static final String VERSION = getVersion();
   private static final String AVAILABILITY = "Availability";
   private static final String CONSISTENCY = "Consistency";
+  private static final String SECURITY = "Security";
 
   @Autowired
   private CacheManagerBusiness cacheManagerBusiness;
@@ -125,6 +126,7 @@ public class TinyPounderMainUI extends UI {
   private Slider reconnectWindow;
   private GridLayout dataRootGrid;
   private GridLayout consistencyGrid;
+  private HorizontalLayout securityGrid;
   private Slider dataRoots;
   private CheckBox platformPersistence;
   private CheckBox platformBackup;
@@ -142,7 +144,9 @@ public class TinyPounderMainUI extends UI {
   private TextField baseLocation;
   private Button trashDataButton;
   private RadioButtonGroup<String> consistencyGroup;
+  private CheckBox securityCheckBox;
   private TextField votersCountTextField;
+  private TextField securityField;
 
   @Override
   protected void init(VaadinRequest vaadinRequest) {
@@ -699,6 +703,28 @@ public class TinyPounderMainUI extends UI {
 
       layout.addComponentsAndExpand(dataRootGrid);
 
+      //security
+      securityGrid = new HorizontalLayout();
+      securityCheckBox = new CheckBox();
+      securityCheckBox.setCaption(SECURITY);
+
+      securityCheckBox.addStyleName(ValoTheme.OPTIONGROUP_HORIZONTAL);
+
+      securityGrid.addComponent(securityCheckBox);
+      securityCheckBox.addStyleName("align-bottom25");
+      securityField = new TextField("Security Root Directory");
+      securityField.setValue(settings.getSecurityPath() != null ? settings.getSecurityPath() : "");
+
+      securityCheckBox.addValueChangeListener(event -> {
+        if (!event.getValue()) {
+          securityGrid.removeComponent(securityField);
+        } else {
+          securityGrid.addComponentsAndExpand(securityField);
+        }
+      });
+      layout.addComponentsAndExpand(securityGrid);
+
+
       //consistency and voters
       consistencyGrid = new GridLayout(2, 1);
       consistencyGroup = new RadioButtonGroup<>();
@@ -914,6 +940,21 @@ public class TinyPounderMainUI extends UI {
               "    </service>\n" +
               "\n");
         }
+
+        // security
+        if (securityCheckBox.getValue()) {
+
+          sb.append("    <service xmlns:security=\"http://www.terracottatech.com/config/security\">\n" +
+              "      <security:security>\n" +
+              "        <security:security-root-directory>" + securityField.getValue() + "</security:security-root-directory>\n" +
+              "        <security:ssl-tls/>\n" +
+              "        <security:authentication>\n" +
+              "          <security:file/>\n" +
+              "        </security:authentication>\n" +
+              "      </security:security>\n" +
+              "    </service>\n" +
+              "\n");
+        }
       }
 
       // servers
@@ -975,6 +1016,8 @@ public class TinyPounderMainUI extends UI {
       }
 
       tcConfigXml.setValue(tcConfigXml.getValue() + xml + "\n\n");
+      settings.setSecurityPath(securityField.getValue());
+
     }
   }
 
