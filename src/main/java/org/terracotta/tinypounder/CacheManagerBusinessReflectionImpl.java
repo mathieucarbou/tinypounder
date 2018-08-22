@@ -17,6 +17,8 @@ package org.terracotta.tinypounder;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import static org.terracotta.tinypounder.CacheConfiguration.ClusterTierType.DEDICATED;
+import static org.terracotta.tinypounder.CacheConfiguration.ClusterTierType.SHARED;
 
 import java.io.File;
 import java.io.IOException;
@@ -40,9 +42,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
-
-import static org.terracotta.tinypounder.CacheConfiguration.ClusterTierType.DEDICATED;
-import static org.terracotta.tinypounder.CacheConfiguration.ClusterTierType.SHARED;
 
 @Service
 public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness {
@@ -238,13 +237,13 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
   }
 
   @Override
-  public void initializeCacheManager(String terracottaServerUrl, String cmName, String diskPersistenceLocation, String defaultOffheapResource, String serverDiskResource) {
+  public void initializeCacheManager(String terracottaServerUrl, String cmName, String diskPersistenceLocation, String defaultOffheapResource, String serverDiskResource, String securityPath) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       Object clusteringServiceConfigurationBuilder;
       if (terracottaServerUrl != null) {
         URI clusterUri = URI.create("terracotta://" + terracottaServerUrl + "/" + cmName);
-        clusteringServiceConfigurationBuilder = constructClusteringServiceConfigurationBuilder(cmName, clusterUri, kitAwareClassLoaderDelegator.isEEKit(), defaultOffheapResource, serverDiskResource);
+        clusteringServiceConfigurationBuilder = constructClusteringServiceConfigurationBuilder(cmName, clusterUri, kitAwareClassLoaderDelegator.isEEKit(), defaultOffheapResource, serverDiskResource, securityPath);
       } else {
         clusteringServiceConfigurationBuilder = null;
       }
@@ -329,7 +328,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
     return buildMethod.invoke(cacheManagerBuilder);
   }
 
-  private Object constructClusteringServiceConfigurationBuilder(String clusterTierManagerName, URI clusterUri, boolean eeKit, String defaultOffheapResource, String serverDiskResource) throws IllegalAccessException, InvocationTargetException, ClassNotFoundException, NoSuchMethodException {
+  private Object constructClusteringServiceConfigurationBuilder(String clusterTierManagerName, URI clusterUri, boolean eeKit, String defaultOffheapResource, String serverDiskResource, String securityPath) throws IllegalAccessException, InvocationTargetException, ClassNotFoundException, NoSuchMethodException {
 
     Class<?> memoryUnitClass = loadClass("org.ehcache.config.units.MemoryUnit");
     Method valueOfMethod = memoryUnitClass.getMethod("valueOf", String.class);
@@ -351,7 +350,7 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
 
 
       Class<?> enterpriseClusteringServiceConfigurationBuilderClass = loadClass("com.terracottatech.ehcache.clustered.client.config.builders.EnterpriseClusteringServiceConfigurationBuilder");
-      Method enterpriseClusterMethod = enterpriseClusteringServiceConfigurationBuilderClass.getMethod("enterpriseCluster", URI.class);
+
 
       Method autoCreateMethod = enterpriseClusteringServiceConfigurationBuilderClass.getMethod("autoCreate");
       Method defaultServerResourceMethod = enterpriseServerSideConfigurationBuilderClass.getMethod("defaultServerResource", String.class);
@@ -359,8 +358,15 @@ public class CacheManagerBusinessReflectionImpl implements CacheManagerBusiness 
       Method resourcePoolMethod3 = enterpriseServerSideConfigurationBuilderClass.getMethod("resourcePool", String.class, long.class, memoryUnitClass);
       Method restartableMethod = enterpriseServerSideConfigurationBuilderClass.getMethod("restartable", String.class);
 
+      Object enterpriseClusteringServiceConfigurationBuilder;
+      if (securityPath != null) {
+        Method enterpriseClusterMethod = enterpriseClusteringServiceConfigurationBuilderClass.getMethod("enterpriseSecureCluster", URI.class, Path.class);
+        enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve(clusterTierManagerName), Paths.get(securityPath));
+      } else {
+        Method enterpriseClusterMethod = enterpriseClusteringServiceConfigurationBuilderClass.getMethod("enterpriseCluster", URI.class);
+        enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve(clusterTierManagerName));
+      }
 
-      Object enterpriseClusteringServiceConfigurationBuilder = enterpriseClusterMethod.invoke(null, clusterUri.resolve(clusterTierManagerName));
       if (timeoutsClass != null && timeoutsInstance != null) {
         Method timeoutsMethod = enterpriseClusteringServiceConfigurationBuilderClass.getMethod("timeouts", timeoutsClass);
         enterpriseClusteringServiceConfigurationBuilder = timeoutsMethod.invoke(enterpriseClusteringServiceConfigurationBuilder, timeoutsInstance);

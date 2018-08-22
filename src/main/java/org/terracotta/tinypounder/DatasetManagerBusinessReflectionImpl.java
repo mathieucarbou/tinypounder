@@ -9,6 +9,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.net.URI;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -401,17 +403,22 @@ public class DatasetManagerBusinessReflectionImpl {
     return "AVAILABLE";
   }
 
-  public void initializeDatasetManager(String terracottaServerUrl) {
+  public void initializeDatasetManager(String terracottaServerUrl, String securityPath) {
     try {
       Thread.currentThread().setContextClassLoader(kitAwareClassLoaderDelegator.getUrlClassLoader());
       initCommonObjectsAndClasses();
       if (terracottaServerUrl != null) {
         URI clusterUri = URI.create("terracotta://" + terracottaServerUrl);
 
-        // DatasetManager.clustered(URI.create(uri)).build()
         datasetManagerClass = loadClass("com.terracottatech.store.manager.DatasetManager");
-        Method clusteredMethod = datasetManagerClass.getMethod("clustered", URI.class);
-        Object clusteredDatasetManagerBuilder = clusteredMethod.invoke(null, clusterUri);
+        Object clusteredDatasetManagerBuilder;
+        if (securityPath != null) {
+          Method clusteredMethod = datasetManagerClass.getMethod("secureClustered", URI.class, Path.class);
+          clusteredDatasetManagerBuilder = clusteredMethod.invoke(null, clusterUri, Paths.get(securityPath));
+        } else {
+          Method clusteredMethod = datasetManagerClass.getMethod("clustered", URI.class);
+          clusteredDatasetManagerBuilder = clusteredMethod.invoke(null, clusterUri);
+        }
 
         Class<?> clusteredDatasetManagerBuilderClass = loadClass("com.terracottatech.store.client.builder.datasetmanager.clustered.ClusteredDatasetManagerBuilderImpl");
 

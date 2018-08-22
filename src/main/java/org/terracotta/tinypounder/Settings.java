@@ -23,8 +23,11 @@ public class Settings {
   @Value("${kitPath}")
   private String kitPath;
 
-  @Value("${securityPath}")
-  private String securityPath;
+  @Value("${serverSecurityPath}")
+  private String serverSecurityPath;
+
+  @Value("${clientSecurityPath}")
+  private String clientSecurityPath;
 
   @Value("${licensePath}")
   private String licensePath;
@@ -58,12 +61,22 @@ public class Settings {
       }
     }
     // always prefer system props over saved config
-    if (securityPath == null || securityPath.isEmpty()) {
-      securityPath = properties.getProperty("securityPath");
-      if (securityPath != null) {
-        File folder = new File(securityPath);
+    if (serverSecurityPath == null || serverSecurityPath.isEmpty()) {
+      serverSecurityPath = properties.getProperty("serverSecurityPath");
+      if (serverSecurityPath != null) {
+        File folder = new File(serverSecurityPath);
         if (!folder.exists() || !folder.isDirectory()) {
-          securityPath = null;
+          serverSecurityPath = null;
+        }
+      }
+    }
+
+    if (clientSecurityPath == null || clientSecurityPath.isEmpty()) {
+      clientSecurityPath = properties.getProperty("clientSecurityPath");
+      if (clientSecurityPath != null) {
+        File folder = new File(clientSecurityPath);
+        if (!folder.exists() || !folder.isDirectory()) {
+          clientSecurityPath = null;
         }
       }
     }
@@ -124,8 +137,11 @@ public class Settings {
     if (kitPath != null) {
       properties.setProperty("kitPath", kitPath);
     }
-    if (securityPath != null) {
-      properties.setProperty("securityPath", securityPath);
+    if (serverSecurityPath != null) {
+      properties.setProperty("serverSecurityPath", serverSecurityPath);
+    }
+    if (clientSecurityPath != null) {
+      properties.setProperty("clientSecurityPath", clientSecurityPath);
     }
     if (licensePath != null) {
       properties.setProperty("licensePath", licensePath);
@@ -152,12 +168,20 @@ public class Settings {
     }
   }
 
-  public String getSecurityPath() {
-    return securityPath;
+  public String getServerSecurityPath() {
+    return serverSecurityPath;
   }
 
-  public void setSecurityPath(String securityPath) {
-    this.securityPath = securityPath;
+  public void setServerSecurityPath(String serverSecurityPath) {
+    this.serverSecurityPath = serverSecurityPath;
+  }
+
+  public String getClientSecurityPath() {
+    return clientSecurityPath;
+  }
+
+  public void setClientSecurityPath(String clientSecurityPath) {
+    this.clientSecurityPath = clientSecurityPath;
   }
 
   public String getKitPath() {

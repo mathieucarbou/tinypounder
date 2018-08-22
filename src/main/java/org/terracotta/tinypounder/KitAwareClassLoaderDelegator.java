@@ -30,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -134,7 +135,18 @@ public class KitAwareClassLoaderDelegator {
     }
   }
 
-  public void setKitPath(String kitPath) {
+  public boolean verifySecurityPath(String securityPath) {
+    if (securityPath != null && !securityPath.isEmpty()) {
+      Path path = Paths.get(securityPath);
+      File securityDirectory = path.toFile();
+      return securityDirectory.exists()
+          && securityDirectory.isDirectory()
+          && Arrays.stream(securityDirectory.list()).anyMatch(s -> s.contains("access-control") || s.contains("identity") || s.contains("trusted-authority"));
+    }
+    return false;
+  }
+
+  public void setAndVerifyKitPathAndClassLoader(String kitPath) {
     settings.setKitPath(kitPath);
     if (kitPath != null && !kitPath.isEmpty()) {
       try {

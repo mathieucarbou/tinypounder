@@ -24,6 +24,7 @@ import org.ehcache.clustered.client.config.builders.ClusteringServiceConfigurati
 import org.ehcache.config.CacheConfiguration;
 import org.ehcache.config.builders.CacheConfigurationBuilder;
 import org.ehcache.config.builders.CacheManagerBuilder;
+import static org.ehcache.config.builders.ResourcePoolsBuilder.newResourcePoolsBuilder;
 import org.ehcache.config.units.MemoryUnit;
 import org.ehcache.core.EhcacheManager;
 import org.ehcache.core.HumanReadable;
@@ -38,8 +39,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.Comparator;
-
-import static org.ehcache.config.builders.ResourcePoolsBuilder.newResourcePoolsBuilder;
 
 
 /**
@@ -119,7 +118,7 @@ public class CacheManagerBusinessApiImpl implements CacheManagerBusiness {
   }
 
   @Override
-  public void initializeCacheManager(String terracottaServerUrl, String cmName, String tinyPounderDiskPersistenceLocation, String defaultOffheapResource, String diskResource) {
+  public void initializeCacheManager(String terracottaServerUrl, String cmName, String tinyPounderDiskPersistenceLocation, String defaultOffheapResource, String diskResource, String securityPath) {
     URI clusterUri = URI.create("terracotta://" + terracottaServerUrl + "/" + cmName);
 
     File tinyPounderDiskPersistenceLocationFolder = new File(tinyPounderDiskPersistenceLocation);

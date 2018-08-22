@@ -109,11 +109,13 @@ public class TinyPounderMainUI extends UI {
   private TabSheet mainLayout;
   private VerticalLayout cacheLayout;
   private VerticalLayout datasetLayout;
+  private VerticalLayout clientSecurityLayout;
 
   private VerticalLayout cacheControls;
   private VerticalLayout datasetControls;
   private VerticalLayout cacheManagerControls;
   private VerticalLayout datasetManagerControls;
+  private HorizontalLayout clientSecurityControls;
   private VerticalLayout voltronConfigLayout;
   private VerticalLayout voltronControlLayout;
   private VerticalLayout runtimeLayout;
@@ -126,7 +128,7 @@ public class TinyPounderMainUI extends UI {
   private Slider reconnectWindow;
   private GridLayout dataRootGrid;
   private GridLayout consistencyGrid;
-  private HorizontalLayout securityGrid;
+  private HorizontalLayout serverSecurityGrid;
   private Slider dataRoots;
   private CheckBox platformPersistence;
   private CheckBox platformBackup;
@@ -144,9 +146,11 @@ public class TinyPounderMainUI extends UI {
   private TextField baseLocation;
   private Button trashDataButton;
   private RadioButtonGroup<String> consistencyGroup;
-  private CheckBox securityCheckBox;
+  private CheckBox serverSecurityCheckBox;
   private TextField votersCountTextField;
-  private TextField securityField;
+  private TextField serverSecurityField;
+  private CheckBox clientSecurityCheckBox;
+  private TextField clientSecurityField;
 
   @Override
   protected void init(VaadinRequest vaadinRequest) {
@@ -222,15 +226,29 @@ public class TinyPounderMainUI extends UI {
       mainLayout.addTab(runtimeLayout, "STEP 4: DATASETS & CACHES");
     }
     if (kitAwareClassLoaderDelegator.containsTerracottaStore() || kitAwareClassLoaderDelegator.containsEhcache()) {
+      initClientSecurityLayout();
       initCacheLayout();
       initDatasetLayout();
+    }
+  }
+
+  private void initClientSecurityLayout() {
+    if (kitAwareClassLoaderDelegator.isEEKit() && clientSecurityLayout == null) {
+      clientSecurityLayout = new VerticalLayout();
+      clientSecurityLayout.addStyleName("client-layout");
+      runtimeLayout.addComponentsAndExpand(clientSecurityLayout);
+      addClientSecurityControls();
+    } else if (!kitAwareClassLoaderDelegator.containsTerracottaStore() && clientSecurityLayout != null) {
+      // kit does no longer contain tc store libs; clear the datasetLayout
+      runtimeLayout.removeComponent(datasetLayout);
+      datasetLayout = null;
     }
   }
 
   private void initDatasetLayout() {
     if (kitAwareClassLoaderDelegator.containsTerracottaStore() && datasetLayout == null) {
       datasetLayout = new VerticalLayout();
-      datasetLayout.addStyleName("dataset-layout");
+      datasetLayout.addStyleName("client-layout");
       runtimeLayout.addComponentsAndExpand(datasetLayout);
       addDatasetManagerControls();
     } else if (!kitAwareClassLoaderDelegator.containsTerracottaStore() && datasetLayout != null) {
@@ -243,7 +261,7 @@ public class TinyPounderMainUI extends UI {
   private void initCacheLayout() {
     if (kitAwareClassLoaderDelegator.containsEhcache() && cacheLayout == null) {
       cacheLayout = new VerticalLayout();
-      cacheLayout.addStyleName("cache-layout");
+      cacheLayout.addStyleName("client-layout");
       runtimeLayout.addComponentsAndExpand(cacheLayout);
       addCacheManagerControls();
     } else if (!kitAwareClassLoaderDelegator.containsEhcache() && cacheLayout != null) {
@@ -360,6 +378,8 @@ public class TinyPounderMainUI extends UI {
         .sorted() // keep ordering so that stripe idx does not change
         .map(File::getAbsolutePath).collect(Collectors.joining(" "));
     List<String> hostPortList = getHostPortList();
+
+    script = script + (clientSecurityCheckBox.getValue() ? (" -srd " + clientSecurityField.getValue()) : "");
 
     switch (command) {
 
@@ -704,25 +724,35 @@ public class TinyPounderMainUI extends UI {
       layout.addComponentsAndExpand(dataRootGrid);
 
       //security
-      securityGrid = new HorizontalLayout();
-      securityCheckBox = new CheckBox();
-      securityCheckBox.setCaption(SECURITY);
+      serverSecurityGrid = new HorizontalLayout();
+      serverSecurityCheckBox = new CheckBox();
+      serverSecurityCheckBox.setCaption(SECURITY);
 
-      securityCheckBox.addStyleName(ValoTheme.OPTIONGROUP_HORIZONTAL);
+      serverSecurityCheckBox.addStyleName(ValoTheme.OPTIONGROUP_HORIZONTAL);
 
-      securityGrid.addComponent(securityCheckBox);
-      securityCheckBox.addStyleName("align-bottom25");
-      securityField = new TextField("Security Root Directory");
-      securityField.setValue(settings.getSecurityPath() != null ? settings.getSecurityPath() : "");
+      serverSecurityGrid.addComponent(serverSecurityCheckBox);
+      serverSecurityCheckBox.addStyleName("align-bottom25");
+      serverSecurityField = new TextField("Security Root Directory");
+      serverSecurityField.setValue(settings.getServerSecurityPath() != null ? settings.getServerSecurityPath() : "");
 
-      securityCheckBox.addValueChangeListener(event -> {
+      serverSecurityCheckBox.addValueChangeListener(event -> {
         if (!event.getValue()) {
-          securityGrid.removeComponent(securityField);
+          serverSecurityGrid.removeComponent(serverSecurityField);
         } else {
-          securityGrid.addComponentsAndExpand(securityField);
+          serverSecurityGrid.addComponentsAndExpand(serverSecurityField);
         }
       });
-      layout.addComponentsAndExpand(securityGrid);
+
+      serverSecurityField.addValueChangeListener(event -> {
+        if (kitAwareClassLoaderDelegator.verifySecurityPath(serverSecurityField.getValue())) {
+          displayWarningNotification("Security Root Directory location updated with success !");
+          settings.setServerSecurityPath(serverSecurityField.getValue());
+        } else {
+          displayErrorNotification("Security Root Directory path could not update !", "Make sure the path points to a security root directory !");
+        }
+      });
+
+      layout.addComponentsAndExpand(serverSecurityGrid);
 
 
       //consistency and voters
@@ -942,11 +972,11 @@ public class TinyPounderMainUI extends UI {
         }
 
         // security
-        if (securityCheckBox.getValue()) {
+        if (serverSecurityCheckBox.getValue()) {
 
           sb.append("    <service xmlns:security=\"http://www.terracottatech.com/config/security\">\n" +
               "      <security:security>\n" +
-              "        <security:security-root-directory>" + securityField.getValue() + "</security:security-root-directory>\n" +
+              "        <security:security-root-directory>" + serverSecurityField.getValue() + "</security:security-root-directory>\n" +
               "        <security:ssl-tls/>\n" +
               "        <security:authentication>\n" +
               "          <security:file/>\n" +
@@ -1016,7 +1046,6 @@ public class TinyPounderMainUI extends UI {
       }
 
       tcConfigXml.setValue(tcConfigXml.getValue() + xml + "\n\n");
-      settings.setSecurityPath(securityField.getValue());
 
     }
   }
@@ -1462,7 +1491,13 @@ public class TinyPounderMainUI extends UI {
 
     createCacheManagerButton.addClickListener(event -> {
       try {
-        cacheManagerBusiness.initializeCacheManager(!clusteredCheckBox.getValue() ? null : terracottaUrlField.getValue(), clusterTierManagerNameField.getValue(), !diskCheckBox.getValue() ? null : diskPersistenceLocationField.getValue(), offHeapPersistenceLocationField.getValue(), serverDiskPersistenceLocationField.getValue());
+        cacheManagerBusiness.initializeCacheManager(
+            !clusteredCheckBox.getValue() ? null : terracottaUrlField.getValue(),
+            clusterTierManagerNameField.getValue(),
+            !diskCheckBox.getValue() ? null : diskPersistenceLocationField.getValue(),
+            offHeapPersistenceLocationField.getValue(),
+            serverDiskPersistenceLocationField.getValue(),
+            clientSecurityCheckBox.getValue() ? clientSecurityField.getValue() : null);
         cacheManagerConfigTextArea.setValue(cacheManagerBusiness.retrieveHumanReadableConfiguration());
         refreshCacheManagerControls();
       } catch (Exception e) {
@@ -1540,7 +1575,7 @@ public class TinyPounderMainUI extends UI {
     kitPath.setValue(settings.getKitPath() != null ? settings.getKitPath() : "");
     kitPath.addValueChangeListener(event -> {
       try {
-        kitAwareClassLoaderDelegator.setKitPath(kitPath.getValue());
+        kitAwareClassLoaderDelegator.setAndVerifyKitPathAndClassLoader(kitPath.getValue());
         info.setValue("Using " + (kitAwareClassLoaderDelegator.isEEKit() ? "Enterprise" : "Open source") + " Kit");
         if (voltronConfigLayout != null) {
           voltronConfigLayout.removeAllComponents();
@@ -1568,6 +1603,38 @@ public class TinyPounderMainUI extends UI {
     mainLayout.addTab(kitControlsLayout, "STEP 1: KIT");
   }
 
+  private void addClientSecurityControls() {
+    clientSecurityControls = new HorizontalLayout();
+    clientSecurityCheckBox = new CheckBox();
+    clientSecurityCheckBox.setCaption(SECURITY);
+
+    clientSecurityCheckBox.addStyleName(ValoTheme.OPTIONGROUP_HORIZONTAL);
+
+    clientSecurityControls.addComponent(clientSecurityCheckBox);
+    clientSecurityCheckBox.addStyleName("align-bottom25");
+    clientSecurityField = new TextField("Security Root Directory");
+    clientSecurityField.setValue(settings.getClientSecurityPath() != null ? settings.getClientSecurityPath() : "");
+
+    clientSecurityCheckBox.addValueChangeListener(event -> {
+      if (!event.getValue()) {
+        clientSecurityControls.removeComponent(clientSecurityField);
+      } else {
+        clientSecurityControls.addComponentsAndExpand(clientSecurityField);
+      }
+    });
+
+    clientSecurityField.addValueChangeListener(event -> {
+      if (kitAwareClassLoaderDelegator.verifySecurityPath(clientSecurityField.getValue())) {
+        displayWarningNotification("Security Root Directory location updated with success !");
+        settings.setClientSecurityPath(clientSecurityField.getValue());
+      } else {
+        displayErrorNotification("Security Root Directory path could not update !", "Make sure the path points to a security root directory !");
+      }
+    });
+
+    clientSecurityLayout.addComponent(clientSecurityControls);
+
+  }
   private void addDatasetManagerControls() {
 
     datasetManagerControls = new VerticalLayout();
@@ -1598,7 +1665,9 @@ public class TinyPounderMainUI extends UI {
 
     initializeDatasetManager.addClickListener(event -> {
       try {
-        datasetManagerBusiness.initializeDatasetManager(!clusteredCheckBox.getValue() ? null : terracottaUrlField.getValue());
+        datasetManagerBusiness.initializeDatasetManager(
+            !clusteredCheckBox.getValue() ? null : terracottaUrlField.getValue(),
+            clientSecurityCheckBox.getValue() ? clientSecurityField.getValue() : null);
         refreshDatasetManagerControls();
       } catch (Exception e) {
         displayErrorNotification("DatasetManager could not be initialized!", e);
