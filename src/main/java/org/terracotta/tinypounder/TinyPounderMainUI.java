@@ -1019,6 +1019,10 @@ public class TinyPounderMainUI extends UI {
             "      <voter count=\"" + votersCount + "\"/>\n" +
             "    </consistency>\n" +
             "  </failover-priority>\n\n");
+      } else {
+        sb.append("  <failover-priority>\n" +
+            "    <availability/>\n" +
+            "  </failover-priority>\n\n");
       }
 
       // ends XML
