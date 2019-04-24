@@ -17,7 +17,7 @@ import java.util.function.Consumer;
 public class ProcUtils {
   private static String OS = System.getProperty("os.name").toLowerCase();
 
-  static AnyProcess run(File workDir, String command, Queue<String> consoleLines, Consumer<String> onNewLine, Runnable onStop) {
+  static AnyProcess run(File workDir, String command, Queue<String> consoleLines, Consumer<String> onNewLine, Runnable onTerminated) {
     final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
     final OutputStream out = new OutputStream() {
       @Override
@@ -53,7 +53,7 @@ public class ProcUtils {
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
-      onStop.run();
+      onTerminated.run();
     }, "Process (" + command + ")");
     waiter.setDaemon(true);
     waiter.start();

@@ -57,10 +57,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -181,7 +183,7 @@ public class TinyPounderMainUI extends UI {
     mainLayout.addSelectedTabChangeListener(tabEvent -> {
       if (tabEvent.getTabSheet().getSelectedTab().equals(tab.getComponent())) {
         new Thread(() -> {
-          runningServers.values().forEach(RunningServer::stop);
+          runningServers.values().forEach(RunningServer::kill);
           consoleRefresher.cancel(true);
           SpringApplication.exit(appContext);
         }).start();
@@ -355,7 +357,7 @@ public class TinyPounderMainUI extends UI {
       Button clusterStopBtn = new Button();
       clusterStopBtn.addStyleName("align-bottom");
       clusterStopBtn.setCaption("Stop cluster");
-      clusterStopBtn.setData("stop");
+      clusterStopBtn.setData("stop-cluster");
       clusterStopBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       row1.addComponents(clusterNameTF, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn, clusterStatusBtn);
@@ -364,7 +366,13 @@ public class TinyPounderMainUI extends UI {
     voltronControlLayout.addComponentsAndExpand(row1);
 
     consoles = new TabSheet();
+    consoles.addSelectedTabChangeListener((TabSheet.SelectedTabChangeListener) event -> {
+      TextArea textArea = (TextArea) event.getTabSheet().getSelectedTab();
+      textArea.setCursorPosition(textArea.getValue().length());
+    });
+
     mainConsole = addConsole("Main", "main");
+
     voltronControlLayout.addComponentsAndExpand(consoles);
   }
 
@@ -405,7 +413,7 @@ public class TinyPounderMainUI extends UI {
       case "dump":
       case "status":
       case "backup":
-      case "stop": {
+      case "stop-cluster": {
         ProcUtils.run(
             workDir,
             script + " " + command + " -n " + clusterNameTF.getValue() + " " + hostPortList.stream().collect(Collectors.joining(" ")),
@@ -439,9 +447,7 @@ public class TinyPounderMainUI extends UI {
   }
 
   private void updateMainConsole(Queue<String> consoleLines) {
-    String text = String.join("", consoleLines);
-    mainConsole.setValue(text);
-    mainConsole.setCursorPosition(text.length());
+    updateTextArea(mainConsole, consoleLines);
   }
 
   private TextArea addConsole(String title, String key) {
@@ -484,12 +490,12 @@ public class TinyPounderMainUI extends UI {
           startBT.setStyleName("align-top");
           serverControls.addComponent(startBT);
 
-          Button stopBT = new Button();
-          stopBT.setEnabled(false);
-          stopBT.setCaption("STOP");
-          stopBT.setStyleName("align-top");
-          stopBT.setData(serverName);
-          serverControls.addComponent(stopBT);
+          Button killBT = new Button();
+          killBT.setEnabled(false);
+          killBT.setCaption("KILL");
+          killBT.setStyleName("align-top");
+          killBT.setData(serverName);
+          serverControls.addComponent(killBT);
 
           Button statusBT = new Button();
           statusBT.setEnabled(false);
@@ -507,10 +513,10 @@ public class TinyPounderMainUI extends UI {
           addConsole(serverName, stripeName + "-" + serverName);
 
           startBT.addClickListener((Button.ClickListener) event -> {
-            startServer(stripeName, (String) event.getButton().getData(), startBT, stopBT, statusBT, state, pid);
+            startServer(stripeName, (String) event.getButton().getData(), startBT, killBT, statusBT, state, pid);
           });
-          stopBT.addClickListener((Button.ClickListener) event -> {
-            stopServer(stripeName, (String) event.getButton().getData(), stopBT, statusBT);
+          killBT.addClickListener((Button.ClickListener) event -> {
+            killServer(stripeName, (String) event.getButton().getData(), killBT, statusBT);
           });
           statusBT.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
         }
@@ -550,17 +556,17 @@ public class TinyPounderMainUI extends UI {
     return servers;
   }
 
-  private void stopServer(String stripeName, String serverName, Button stopBT, Button statusBT) {
+  private void killServer(String stripeName, String serverName, Button killBT, Button statusBT) {
     RunningServer runningServer = runningServers.get(stripeName + "-" + serverName);
     if (runningServer != null) {
-      runningServer.stop();
-      stopBT.setEnabled(false);
+      runningServer.kill();
+      killBT.setEnabled(false);
       statusBT.setEnabled(false);
       runningServer.refreshConsole();
     }
   }
 
-  private void startServer(String stripeName, String serverName, Button startBT, Button stopBT, Button statusBT, Label stateLBL, Label pidLBL) {
+  private void startServer(String stripeName, String serverName, Button startBT, Button killBT, Button statusBT, Label stateLBL, Label pidLBL) {
     File stripeconfig = tcConfigLocationPerStripe.get(stripeName);
     if (stripeconfig == null) {
       generateXML(false);
@@ -576,11 +582,11 @@ public class TinyPounderMainUI extends UI {
         () -> {
           runningServers.remove(key);
           access(() -> {
-            stopBT.setEnabled(false);
+            killBT.setEnabled(false);
             statusBT.setEnabled(false);
             startBT.setEnabled(true);
             pidLBL.setValue("");
-            stateLBL.setValue("STOPPED");
+            stateLBL.setValue("TERMINATED");
           });
         },
         newState -> access(() -> stateLBL.setValue("STATE: " + newState)),
@@ -596,7 +602,7 @@ public class TinyPounderMainUI extends UI {
     stateLBL.setValue("STARTING");
     runningServer.start();
     startBT.setEnabled(false);
-    stopBT.setEnabled(true);
+    killBT.setEnabled(true);
     statusBT.setEnabled(true);
     runningServer.refreshConsole();
   }
@@ -1639,6 +1645,7 @@ public class TinyPounderMainUI extends UI {
     clientSecurityLayout.addComponent(clientSecurityControls);
 
   }
+
   private void addDatasetManagerControls() {
 
     datasetManagerControls = new VerticalLayout();
@@ -1982,5 +1989,16 @@ public class TinyPounderMainUI extends UI {
     return v == null ? "dev" : v;
   }
 
+  static void updateTextArea(TextArea textArea, Collection<String> lines) {
+    synchronized (textArea) {
+      String text = String.join("", lines);
+      if (!Objects.equals(textArea.getValue(), text)) {
+        int position = textArea.getCursorPosition();
+        boolean autoscroll = position >= textArea.getValue().length() - 1;
+        textArea.setValue(text);
+        textArea.setCursorPosition(autoscroll ? text.length() : Math.min(position, text.length()));
+      }
+    }
+  }
 
 }
