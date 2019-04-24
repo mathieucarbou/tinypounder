@@ -22,23 +22,23 @@ class RunningServer {
   private final String serverName;
   private final TextArea console;
   private final ArrayBlockingQueue<String> lines;
-  private final Runnable onStop;
+  private final Runnable onTerminated;
   private final Consumer<String> onState;
   private final Consumer<Long> onPID;
   private long pid;
 
-  RunningServer(File workDir, File stripeconfig, String serverName, TextArea console, int maxLines, Runnable onStop, Consumer<String> onState, Consumer<Long> onPID) {
+  RunningServer(File workDir, File stripeconfig, String serverName, TextArea console, int maxLines, Runnable onTerminated, Consumer<String> onState, Consumer<Long> onPID) {
     this.workDir = workDir;
     this.stripeconfig = stripeconfig;
     this.serverName = serverName;
     this.lines = new ArrayBlockingQueue<>(maxLines);
     this.console = console;
-    this.onStop = onStop;
+    this.onTerminated = onTerminated;
     this.onState = onState;
     this.onPID = onPID;
   }
 
-  void stop() {
+  void kill() {
     try {
       ProcUtils.kill(pid);
     } catch (InterruptedException e) {
@@ -73,13 +73,11 @@ class RunningServer {
             }
           }
         },
-        onStop);
+        onTerminated);
   }
 
   void refreshConsole() {
-    String text = String.join("", lines);
-    console.setValue(text);
-    console.setCursorPosition(text.length());
+    TinyPounderMainUI.updateTextArea(console, lines);
   }
 
 }
