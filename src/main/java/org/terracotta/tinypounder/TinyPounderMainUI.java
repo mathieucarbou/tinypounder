@@ -357,7 +357,7 @@ public class TinyPounderMainUI extends UI {
       Button clusterStopBtn = new Button();
       clusterStopBtn.addStyleName("align-bottom");
       clusterStopBtn.setCaption("Stop cluster");
-      clusterStopBtn.setData("stop-cluster");
+      clusterStopBtn.setData("stop");
       clusterStopBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
       row1.addComponents(clusterNameTF, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn, clusterStatusBtn);
@@ -413,7 +413,7 @@ public class TinyPounderMainUI extends UI {
       case "dump":
       case "status":
       case "backup":
-      case "stop-cluster": {
+      case "stop": {
         ProcUtils.run(
             workDir,
             script + " " + command + " -n " + clusterNameTF.getValue() + " " + hostPortList.stream().collect(Collectors.joining(" ")),
