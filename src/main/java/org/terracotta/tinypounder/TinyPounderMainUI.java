@@ -309,6 +309,7 @@ public class TinyPounderMainUI extends UI {
 
     Button clusterStartBtn = new Button();
     clusterStartBtn.setCaption("Start all servers");
+    clusterStartBtn.setDescription("Don't use if not all servers are co-located with TinyPounder");
     clusterStartBtn.addStyleName("align-bottom");
     clusterStartBtn.addClickListener(event -> {
       for (Component child : serverControls) {
@@ -486,6 +487,7 @@ public class TinyPounderMainUI extends UI {
 
           Button startBT = new Button();
           startBT.setCaption("START");
+          startBT.setDescription("Only works for servers on same host as TinyPounder");
           startBT.setData(serverName);
           startBT.setStyleName("align-top");
           serverControls.addComponent(startBT);
@@ -493,6 +495,7 @@ public class TinyPounderMainUI extends UI {
           Button killBT = new Button();
           killBT.setEnabled(false);
           killBT.setCaption("KILL");
+          killBT.setDescription("Only works for servers on same host as TinyPounder");
           killBT.setStyleName("align-top");
           killBT.setData(serverName);
           serverControls.addComponent(killBT);
@@ -532,8 +535,9 @@ public class TinyPounderMainUI extends UI {
       for (int serverId = 1; serverId < serverGrid.getColumns(); serverId++) {
         FormLayout form = (FormLayout) serverGrid.getComponent(serverId, stripeId);
         if (form != null) {
-          TextField clientPortTF = (TextField) form.getComponent(2);
-          servers.add("localhost:" + clientPortTF.getValue());
+          TextField hostNameTF = (TextField) form.getComponent(2);
+          TextField clientPortTF = (TextField) form.getComponent(3);
+          servers.add(hostNameTF.getValue() + ":" + clientPortTF.getValue());
         }
       }
     }
@@ -810,7 +814,7 @@ public class TinyPounderMainUI extends UI {
       serverGrid.setWidth(100, Unit.PERCENTAGE);
       serverGrid.addStyleName("server-grid");
 
-      stripes = new Slider(nStripes + " stripes", 1, ee ? 4 : 1);
+      stripes = new Slider(nStripes + " stripes", 1, ee ? 8 : 1);
       stripes.setValue((double) nStripes);
       stripes.addValueChangeListener((HasValue.ValueChangeListener<Double>) event -> {
         stripes.setCaption(event.getValue().intValue() + " stripes");
@@ -1004,9 +1008,10 @@ public class TinyPounderMainUI extends UI {
         if (form != null) {
           TextField name = (TextField) form.getComponent(0);
           TextField logs = (TextField) form.getComponent(1);
-          TextField clientPort = (TextField) form.getComponent(2);
-          TextField groupPort = (TextField) form.getComponent(3);
-          sb.append("    <server host=\"localhost\" name=\"" + name.getValue() + "\">\n" +
+          TextField hostName = (TextField) form.getComponent(2);
+          TextField clientPort = (TextField) form.getComponent(3);
+          TextField groupPort = (TextField) form.getComponent(4);
+          sb.append("    <server host=\"" + hostName.getValue() + "\" name=\"" + name.getValue() + "\">\n" +
               "      <logs>" + logs.getValue() + "</logs>\n" +
               "      <tsa-port>" + clientPort.getValue() + "</tsa-port>\n" +
               "      <tsa-group-port>" + groupPort.getValue() + "</tsa-group-port>\n" +
@@ -1175,6 +1180,7 @@ public class TinyPounderMainUI extends UI {
               form.addComponents(
                   new Label("Server Name"),
                   new Label("Logs location"),
+                  new Label("Host name"),
                   new Label("Client port"),
                   new Label("Group port"));
               serverGrid.addComponent(form, c, r);
@@ -1182,20 +1188,23 @@ public class TinyPounderMainUI extends UI {
               FormLayout form = new FormLayout();
               TextField name = new TextField();
               name.setPlaceholder("Name");
-              name.setValue("stripe-" + r + "-server-" + c);
+              name.setValue("stripe-" + (r-1) + "-server-" + c);
               name.addValueChangeListener(event -> updateServerControls());
               TextField logs = new TextField();
               logs.setPlaceholder("Location");
               logs.setValue(new File(baseLocation.getValue(), "logs/" + name.getValue()).getAbsolutePath());
               logs.setEnabled(false);
               name.addValueChangeListener(event -> logs.setValue(new File(baseLocation.getValue(), "logs/" + name.getValue()).getAbsolutePath()));
+              TextField hostName = new TextField();
+              hostName.setPlaceholder("Host name");
+              hostName.setValue("localhost");
               TextField clientPort = new TextField();
               clientPort.setPlaceholder("Client port");
               clientPort.setValue("" + (9410 + (r - 1) * 10 + (c - 1)));
               TextField groupPort = new TextField();
               groupPort.setPlaceholder("Group port");
-              groupPort.setValue("" + (9430 + (r - 1) * 10 + (c - 1)));
-              form.addComponents(name, logs, clientPort, groupPort);
+              groupPort.setValue("" + (9530 + (r - 1) * 10 + (c - 1)));
+              form.addComponents(name, logs, hostName, clientPort, groupPort);
               serverGrid.addComponent(form, c, r);
             }
           }
