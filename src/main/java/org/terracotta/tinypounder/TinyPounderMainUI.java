@@ -48,12 +48,15 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
 
 import java.io.File;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.FileSystems;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -72,6 +75,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * The UI class
@@ -134,7 +138,7 @@ public class TinyPounderMainUI extends UI {
   private Slider dataRoots;
   private CheckBox platformPersistence;
   private CheckBox platformBackup;
-  private TextArea tcConfigXml;
+  private TextArea configTextArea;
   private GridLayout kitPathLayout;
   private TextField clusterNameTF;
   private Map<String, File> tcConfigLocationPerStripe = new ConcurrentHashMap<>();
@@ -326,16 +330,23 @@ public class TinyPounderMainUI extends UI {
       clusterNameTF.setValue("MyCluster");
 
       Button clusterConfigBtn = new Button();
-      clusterConfigBtn.addStyleName("align-bottom");
-      clusterConfigBtn.setCaption("Configure");
-      clusterConfigBtn.setData("configure");
-      clusterConfigBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
-
       Button clusterReConfigBtn = new Button();
-      clusterReConfigBtn.addStyleName("align-bottom");
-      clusterReConfigBtn.setCaption("Reconfigure");
-      clusterReConfigBtn.setData("reconfigure");
-      clusterReConfigBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
+      if (isDynamicConfig()) {
+        clusterConfigBtn.addStyleName("align-bottom");
+        clusterConfigBtn.setCaption("Configure");
+        clusterConfigBtn.setData("activate");
+        clusterConfigBtn.addClickListener((Button.ClickListener) this::executeConfigToolCommand);
+      } else {
+        clusterConfigBtn.addStyleName("align-bottom");
+        clusterConfigBtn.setCaption("Configure");
+        clusterConfigBtn.setData("configure");
+        clusterConfigBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
+
+        clusterReConfigBtn.addStyleName("align-bottom");
+        clusterReConfigBtn.setCaption("Reconfigure");
+        clusterReConfigBtn.setData("reconfigure");
+        clusterReConfigBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
+      }
 
       Button clusterBackupBtn = new Button();
       clusterBackupBtn.addStyleName("align-bottom");
@@ -361,7 +372,11 @@ public class TinyPounderMainUI extends UI {
       clusterStopBtn.setData("stop");
       clusterStopBtn.addClickListener((Button.ClickListener) this::executeClusterToolCommand);
 
-      row1.addComponents(clusterNameTF, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn, clusterStatusBtn);
+      if (isDynamicConfig()) {
+        row1.addComponents(clusterNameTF, clusterConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn, clusterStatusBtn);
+      } else {
+        row1.addComponents(clusterNameTF, clusterConfigBtn, clusterReConfigBtn, clusterBackupBtn, clusterDumpBtn, clusterStopBtn, clusterStatusBtn);
+      }
     }
 
     voltronControlLayout.addComponentsAndExpand(row1);
@@ -377,11 +392,21 @@ public class TinyPounderMainUI extends UI {
     voltronControlLayout.addComponentsAndExpand(consoles);
   }
 
+  protected static Collection<Path> find(String searchDirectory, PathMatcher matcher) {
+    try (Stream<Path> files = Files.walk(Paths.get(searchDirectory))) {
+      return files.filter(matcher::matches).collect(Collectors.toList());
+    } catch (IOException e) {
+      throw new RuntimeException("Cannot locate cluster-tool script", e);
+    }
+  }
+
   private void executeClusterToolCommand(Button.ClickEvent event) {
     String command = (String) event.getButton().getData();
     File workDir = new File(settings.getKitPath());
     LinkedBlockingQueue<String> consoleLines = new LinkedBlockingQueue<>(); // no limit, get all the output
-    String script = new File(workDir, "tools/cluster-tool/bin/cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
+    PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:**cluster-tool.sh");
+    Path clusterToolPath = find(workDir.getAbsolutePath(), matcher).iterator().next();
+    String script = new File(clusterToolPath.getParent().toFile(), "cluster-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
     String configs = tcConfigLocationPerStripe.values()
         .stream()
         .sorted() // keep ordering so that stripe idx does not change
@@ -389,6 +414,9 @@ public class TinyPounderMainUI extends UI {
     List<String> hostPortList = getHostPortList();
 
     script = script + (clientSecurityCheckBox.getValue() ? (" -srd " + clientSecurityField.getValue()) : "");
+
+    String hostPortOpt = " -s ";
+    String hostPortJoiner = isDynamicConfig() ? "," : hostPortOpt;
 
     switch (command) {
 
@@ -415,9 +443,13 @@ public class TinyPounderMainUI extends UI {
       case "status":
       case "backup":
       case "stop": {
+        if (command.equals("stop") && isDynamicConfig()) {
+          command = "shutdown";
+        }
+
         ProcUtils.run(
             workDir,
-            script + " " + command + " -n " + clusterNameTF.getValue() + " " + hostPortList.stream().collect(Collectors.joining(" ")),
+            script + " " + command + " -n " + clusterNameTF.getValue() + hostPortOpt + hostPortList.stream().collect(Collectors.joining(hostPortJoiner)),
             consoleLines,
             newLine -> access(() -> updateMainConsole(consoleLines)),
             () -> access(() -> consoles.setSelectedTab(mainConsole)));
@@ -435,6 +467,37 @@ public class TinyPounderMainUI extends UI {
             () -> access(() -> consoles.setSelectedTab(mainConsole)));
         break;
 
+    }
+
+    consoles.setSelectedTab(mainConsole);
+    updateMainConsole(consoleLines);
+  }
+
+  private void executeConfigToolCommand(Button.ClickEvent event) {
+    String command = (String) event.getButton().getData();
+    File workDir = new File(settings.getKitPath());
+    File licensePath = new File(settings.getLicensePath());
+    LinkedBlockingQueue<String> consoleLines = new LinkedBlockingQueue<>(); // no limit, get all the output
+    String script = new File(workDir, "tools/bin/config-tool." + (ProcUtils.isWindows() ? "bat" : "sh")).getAbsolutePath();
+    String config = tcConfigLocationPerStripe.values()
+        .stream()
+        .findAny()
+        .map(File::getAbsolutePath).get();
+
+    script = script + (clientSecurityCheckBox.getValue() ? (" -srd " + clientSecurityField.getValue()) : "");
+
+    switch (command) {
+      case "activate": {
+        ProcUtils.run(
+            workDir,
+            script + " " + command + " -f " + config + " -n " + clusterNameTF.getValue() + " -l " + licensePath,
+            consoleLines,
+            newLine -> access(() -> updateMainConsole(consoleLines)),
+            () -> access(() -> consoles.setSelectedTab(mainConsole)));
+        break;
+      }
+      default:
+        break;
     }
 
     consoles.setSelectedTab(mainConsole);
@@ -483,6 +546,11 @@ public class TinyPounderMainUI extends UI {
         if (form != null) {
           TextField serverNameTF = (TextField) form.getComponent(0);
           String serverName = serverNameTF.getValue();
+          TextField nodeHostnameTF = (TextField) form.getComponent(2);
+          String nodeHostname = nodeHostnameTF.getValue();
+          TextField clientPortTF = (TextField) form.getComponent(3);
+          String clientPort = clientPortTF.getValue();
+
           serverControls.addComponent(new Label(serverName));
 
           Button startBT = new Button();
@@ -516,7 +584,9 @@ public class TinyPounderMainUI extends UI {
           addConsole(serverName, stripeName + "-" + serverName);
 
           startBT.addClickListener((Button.ClickListener) event -> {
-            startServer(stripeName, (String) event.getButton().getData(), startBT, killBT, statusBT, state, pid);
+            String clusterName = clusterNameTF.getValue();
+            startServer(clusterName, stripeName, (String) event.getButton().getData(), nodeHostname, clientPort, startBT, killBT,
+                statusBT, state, pid);
           });
           killBT.addClickListener((Button.ClickListener) event -> {
             killServer(stripeName, (String) event.getButton().getData(), killBT, statusBT);
@@ -570,19 +640,29 @@ public class TinyPounderMainUI extends UI {
     }
   }
 
-  private void startServer(String stripeName, String serverName, Button startBT, Button killBT, Button statusBT, Label stateLBL, Label pidLBL) {
+  private boolean isDynamicConfig() {
+    return Paths.get(settings.getKitPath(), "init").toFile().exists();
+  }
+
+  private void startServer(String clusterName, String stripeName, String serverName, String hostname, String clientPort,
+                           Button startBT, Button killBT, Button statusBT, Label stateLBL, Label pidLBL) {
     File stripeconfig = tcConfigLocationPerStripe.get(stripeName);
     if (stripeconfig == null) {
-      generateXML(false);
+      if (!isDynamicConfig()) {
+        generateXML(false);
+      } else {
+        generatePropertiesFile(false);
+      }
       stripeconfig = tcConfigLocationPerStripe.get(stripeName);
     }
 
     File workDir = new File(settings.getKitPath());
+    File licensePath = new File(settings.getLicensePath());
     String key = stripeName + "-" + serverName;
     TextArea console = getConsole(key);
 
     RunningServer runningServer = new RunningServer(
-        workDir, stripeconfig, serverName, console, 500,
+        workDir, clusterName, licensePath, stripeconfig, stripeName, serverName, hostname, clientPort, console, 500,
         () -> {
           runningServers.remove(key);
           access(() -> {
@@ -764,14 +844,12 @@ public class TinyPounderMainUI extends UI {
 
       layout.addComponentsAndExpand(serverSecurityGrid);
 
-
       //consistency and voters
       consistencyGrid = new GridLayout(2, 1);
       consistencyGroup = new RadioButtonGroup<>();
       consistencyGroup.setItems(AVAILABILITY, CONSISTENCY);
-      consistencyGroup.setSelectedItem(AVAILABILITY);
+      consistencyGroup.setSelectedItem(CONSISTENCY);
       consistencyGroup.addStyleName(ValoTheme.OPTIONGROUP_HORIZONTAL);
-
 
       consistencyGrid.addComponent(consistencyGroup);
       consistencyGroup.addStyleName("align-bottom");
@@ -780,7 +858,8 @@ public class TinyPounderMainUI extends UI {
       votersGroup.addStyleName("align-bottom3");
       votersCountTextField = new TextField("Voters count");
       votersCountTextField.setMaxLength(2);
-      votersCountTextField.setValue("2");
+      votersCountTextField.setValue("1");
+      consistencyGrid.addComponent(votersGroup, 1, 0);
 
       votersCountTextField.addValueChangeListener(event -> {
         try {
@@ -846,22 +925,26 @@ public class TinyPounderMainUI extends UI {
 
     // XML file generation
     {
-      generateTcConfig = new Button("Generate all tc-config.xml files");
+      generateTcConfig = new Button(isDynamicConfig() ? "Generate config file" : "Generate all config files");
       generateTcConfig.addStyleName("align-bottom");
       generateTcConfig.setWidth(100, Unit.PERCENTAGE);
       generateTcConfig.addClickListener((Button.ClickListener) event -> {
-        generateXML(true);
+        if (!isDynamicConfig()) {
+          generateXML(true);
+        } else {
+          generatePropertiesFile(true);
+        }
         List<String> filenames = tcConfigLocationPerStripe.values().stream().map(File::getName).collect(Collectors.toList());
         Notification.show("Configurations saved:", "Location: " + settings.getKitPath() + "\nFiles: " + filenames, Notification.Type.HUMANIZED_MESSAGE);
       });
       layout.addComponentsAndExpand(generateTcConfig);
 
-      tcConfigXml = new TextArea();
-      tcConfigXml.setWidth(100, Unit.PERCENTAGE);
-      tcConfigXml.setWordWrap(false);
-      tcConfigXml.setRows(50);
-      tcConfigXml.setStyleName("tc-config-xml");
-      layout.addComponentsAndExpand(tcConfigXml);
+      configTextArea = new TextArea();
+      configTextArea.setWidth(100, Unit.PERCENTAGE);
+      configTextArea.setWordWrap(false);
+      configTextArea.setRows(50);
+      configTextArea.setStyleName("tc-config-xml");
+      layout.addComponentsAndExpand(configTextArea);
     }
 
     voltronConfigLayout.addComponentsAndExpand(layout);
@@ -887,7 +970,7 @@ public class TinyPounderMainUI extends UI {
     boolean ee = kitAwareClassLoaderDelegator.isEEKit();
 
     tcConfigLocationPerStripe.clear();
-    tcConfigXml.setValue("");
+    configTextArea.setValue("");
 
     for (int stripeRow = 1; stripeRow < serverGrid.getRows(); stripeRow++) {
 
@@ -1060,8 +1143,134 @@ public class TinyPounderMainUI extends UI {
         }
       }
 
-      tcConfigXml.setValue(tcConfigXml.getValue() + xml + "\n\n");
+      configTextArea.setValue(configTextArea.getValue() + xml + "\n\n");
 
+    }
+  }
+
+  private void generatePropertiesFile(boolean skipConfirmOverwrite) {
+    boolean ee = kitAwareClassLoaderDelegator.isEEKit();
+
+    tcConfigLocationPerStripe.clear();
+    configTextArea.setValue("");
+
+    StringBuilder sb = new StringBuilder();
+
+    if (offheapGrid.getRows() > 1) {
+      List<String> offheapList = new ArrayList<>();
+      for (int r = 1; r < offheapGrid.getRows(); r++) {
+        TextField name = (TextField) offheapGrid.getComponent(0, r);
+        TextField memory = (TextField) offheapGrid.getComponent(1, r);
+        offheapList.add(name.getValue() + ":" + memory.getValue() + "MB");
+      }
+      sb.append("offheap-resources=" + String.join(",", offheapList) + "\n");
+    }
+
+    sb.append("client-reconnect-window=" + reconnectWindow.getValue().intValue() + "s\n");
+
+    if (consistencyGroup.isSelected(CONSISTENCY)) {
+      int votersCount = Integer.parseInt(votersCountTextField.getValue());
+      sb.append("failover-priority=consistency:" + votersCount + "\n");
+    } else {
+      sb.append("failover-priority=availability\n");
+    }
+
+    for (int stripeRow = 1; stripeRow < serverGrid.getRows(); stripeRow++) {
+      sb.append(String.format("stripe.%d.stripe-name=stripe-%d\n", stripeRow, stripeRow));
+
+      for (int serverCol = 1; serverCol < serverGrid.getColumns(); serverCol++) {
+        FormLayout form = (FormLayout) serverGrid.getComponent(serverCol, stripeRow);
+        if (form != null) {
+          TextField name = (TextField) form.getComponent(0);
+          TextField logs = (TextField) form.getComponent(1);
+          TextField hostName = (TextField) form.getComponent(2);
+          TextField clientPort = (TextField) form.getComponent(3);
+          TextField groupPort = (TextField) form.getComponent(4);
+
+          String nodePrefix = "stripe." + stripeRow + ".node." + serverCol + ".";
+          sb.append(nodePrefix + "name=" + name.getValue() + "\n");
+          sb.append(nodePrefix + "hostname=" + hostName.getValue() + "\n");
+          sb.append(nodePrefix + "port=" + clientPort.getValue() + "\n");
+          sb.append(nodePrefix + "group-port=" + groupPort.getValue() + "\n");
+          sb.append(nodePrefix + "log-dir=" + logs.getValue() + "\n");
+
+          // For testing
+          sb.append(nodePrefix + "tc-properties=logging.maxBackups:10,logging.maxLogFileSize:256\n");
+          sb.append(nodePrefix + "logger-overrides=org.terracotta.management:INFO,com.terracottatech.management:INFO\n");
+
+          if (platformBackup.getValue()) {
+            TextField path = (TextField) dataRootGrid.getComponent(DATAROOT_PATH_COLUMN, getBackupRow());
+            sb.append(nodePrefix + "backup-dir=" + path.getValue() + "\n");
+          }
+
+          if (ee) {
+            if (serverSecurityCheckBox.getValue()) {
+              sb.append("security-dir=" + serverSecurityField.getValue() + "\n");
+            }
+
+            if (platformPersistence.getValue()) {
+              TextField path = (TextField) dataRootGrid.getComponent(DATAROOT_PATH_COLUMN, getPersistenceRow());
+              sb.append(nodePrefix + "metadata-dir=" + path.getValue() + "\n");
+            }
+
+            // do not know why but .getComponent(x,y) does not work
+//        for (int r = getDataRootFirstRow(); r < dataRootGrid.getRows(); r++) {
+//          TextField name = (TextField) dataRootGrid.getComponent(DATAROOT_NAME_COLUMN, r);
+//          TextField path = (TextField) dataRootGrid.getComponent(DATAROOT_PATH_COLUMN, r);
+//          sb.append("        <data:directory name=\"" + name.getValue() + "\" use-for-platform=\"false\">" + path.getValue() + "</data:directory>\n");
+//        }
+
+            // workaround - iterate over all components
+            List<Component> components = new ArrayList<>();
+            dataRootGrid.iterator().forEachRemaining(components::add);
+            // remove header
+            components.remove(0);
+            components.remove(0);
+            components.remove(0);
+            if (platformBackup.getValue()) {
+              components.remove(0);
+              components.remove(0);
+            }
+            if (platformPersistence.getValue()) {
+              components.remove(0);
+              components.remove(0);
+            }
+            List<String> dataDirList = new ArrayList<>();
+            for (int i = 0; i < components.size(); i += 2) {
+              TextField dataDirName = (TextField) components.get(i);
+              TextField dataDirPath = (TextField) components.get(i + 1);
+              dataDirList.add(dataDirName.getValue() + ":" + dataDirPath.getValue());
+            }
+            sb.append(nodePrefix + "data-dirs=" + String.join(",", dataDirList) + "\n");
+          }
+        }
+      }
+    }
+
+    String filename = "cluster.properties";
+    File location = new File(settings.getKitPath(), filename);
+    String configText;
+
+    if (location.exists() && !skipConfirmOverwrite) {
+      Notification.show("Config already found: " + location.getName());
+      try {
+        configText = new String(Files.readAllBytes(location.toPath()), "UTF-8");
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
+      }
+    } else {
+      configText = sb.toString();
+      try {
+        Files.write(location.toPath(), configText.getBytes("UTF-8"));
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
+      }
+    }
+
+    configTextArea.setValue(configText);
+
+    for (int stripeRow = 1; stripeRow < serverGrid.getRows(); stripeRow++) {
+      tcConfigLocationPerStripe.put("stripe-" + stripeRow, location);
     }
   }
 
@@ -1188,7 +1397,7 @@ public class TinyPounderMainUI extends UI {
               FormLayout form = new FormLayout();
               TextField name = new TextField();
               name.setPlaceholder("Name");
-              name.setValue("stripe-" + (r-1) + "-server-" + c);
+              name.setValue("stripe-" + r + "-server-" + c);
               name.addValueChangeListener(event -> updateServerControls());
               TextField logs = new TextField();
               logs.setPlaceholder("Location");
@@ -1197,6 +1406,7 @@ public class TinyPounderMainUI extends UI {
               name.addValueChangeListener(event -> logs.setValue(new File(baseLocation.getValue(), "logs/" + name.getValue()).getAbsolutePath()));
               TextField hostName = new TextField();
               hostName.setPlaceholder("Host name");
+              //hostName.setValue("SAG-C02YF3AEJGH6.local");
               hostName.setValue("localhost");
               TextField clientPort = new TextField();
               clientPort.setPlaceholder("Client port");
