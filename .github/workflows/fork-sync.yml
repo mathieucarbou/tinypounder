@@ -1,7 +1,7 @@
-name: Sync
+name: "Fork Sync"
 on:
   schedule:
-    - cron:  '0 * * * *'
+    - cron:  '0 */2 * * *'
   workflow_dispatch:
 jobs:
   sync-master:
@@ -14,7 +14,7 @@ jobs:
         ref: master
     - name: "Update: master"
       id: sync-master
-      uses: aormsby/Fork-Sync-With-Upstream-action@v2.3
+      uses: mathieucarbou/Fork-Sync-With-Upstream-action@fork-sync
       with:
         upstream_repository: Terracotta-OSS/tinypounder
         upstream_branch: master
